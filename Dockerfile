@@ -1,38 +1,36 @@
-# --- Tahap 1: Builder (Untuk Kompilasi) ---
-# Kita pakai image Rust resmi untuk membangun aplikasi
-FROM rust:latest as builder
+# --- Tahap 1: Builder (Menggunakan base Alpine untuk kompilasi) ---
+FROM rust:1.85.1-alpine AS builder
 
-# Buat direktori kerja di dalam kontainer
+# Install build-time dependencies untuk Alpine
+# TAMBAHKAN build-base untuk C/C++ toolchain lengkap
+RUN apk add --no-cache musl-dev openssl-dev pkgconf build-base perl make
+
 WORKDIR /usr/src/app
 
-# Salin file dependensi terlebih dahulu untuk memanfaatkan cache Docker
+# Optimasi layer cache: Salin dependensi dulu
 COPY Cargo.toml Cargo.lock ./
+# Buat dummy project untuk men-cache kompilasi dependensi
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release --target=x86_64-unknown-linux-musl
 
-# Trik untuk men-download dan build dependensi saja
-RUN mkdir src && echo "fn main(){}" > src/main.rs
-RUN cargo build --release
-
-# Sekarang salin semua kode sumber aplikasimu
+# Salin sisa kode dan build aplikasi utama
 COPY src ./src
+RUN touch src/main.rs
+RUN cargo build --release --target=x86_64-unknown-linux-musl
 
-# Hapus file dummy dan build aplikasi utamamu dalam mode rilis (performa maksimal)
-RUN rm -f target/release/deps/merchantportal_api*
-RUN cargo build --release
+# --- Tahap 2: Runner (Menggunakan base Alpine yang super ringan) ---
+FROM alpine:latest
 
-# --- Tahap 2: Runner (Untuk Menjalankan) ---
-# Kita pakai image Debian yang sangat kecil agar efisien
-FROM debian:bullseye-slim
+# Wajib: Install run-time dependencies
+RUN apk add --no-cache libcrypto3 libssl3 ca-certificates tzdata
+# SOLUSI: Prioritaskan IPv4 untuk mengatasi masalah jaringan Docker/WSL
+RUN echo "precedence ::ffff:0:0/96 100" >> /etc/gai.conf
 
-# Update package lists and upgrade to reduce vulnerabilities
-RUN apt-get update && apt-get upgrade -y && apt-get clean
-
-# Salin HANYA file hasil kompilasi dari tahap builder
-# Pastikan 'merchantportal-api' sesuai dengan nama [package] di Cargo.toml
-COPY --from=builder /usr/src/app/target/release/merchantportal-api .
+WORKDIR /app
+# Salin HANYA binary yang sudah jadi dari tahap builder
+COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-musl/release/merchantportal-api .
 
 RUN chmod +x ./merchantportal-api
-# Beri tahu Docker bahwa aplikasi kita akan berjalan di port 3000
 EXPOSE 3000
-
-# Perintah default untuk menjalankan aplikasimu saat kontainer dimulai
 CMD ["./merchantportal-api"]
+

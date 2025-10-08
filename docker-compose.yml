@@ -1,0 +1,16 @@
+services:
+  api-alpine:
+    # Beri nama unik untuk image & kontainer
+    image: myapp-alpine
+    container_name: myapp-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      # Gunakan port host 3002 agar tidak bentrok
+      - "3000:3000"
+    env_file:
+      - ./.env
+    restart: unless-stopped
+
+
