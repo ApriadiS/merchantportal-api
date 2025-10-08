@@ -1,0 +1,139 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::info;
+
+use crate::repositories::promo_repository::Promo;
+use crate::repositories::promo_store_repository::PromoStore;
+use crate::repositories::store_repository::Store;
+
+#[derive(Clone)]
+pub struct CacheRepository {
+    promo_cache_all: Arc<RwLock<Vec<Promo>>>,
+    store_cache_all: Arc<RwLock<Vec<Store>>>,
+    promo_store_cache_all: Arc<RwLock<Vec<PromoStore>>>,
+
+    promo_cache_by_voucher: Arc<RwLock<HashMap<String, Promo>>>,
+    store_cache_by_route: Arc<RwLock<HashMap<String, Store>>>,
+    promo_store_cache_by_id: Arc<RwLock<HashMap<String, PromoStore>>>,
+}
+
+impl CacheRepository {
+    pub fn new() -> Self {
+        Self {
+            promo_cache_all: Arc::new(RwLock::new(Vec::new())),
+            store_cache_all: Arc::new(RwLock::new(Vec::new())),
+            promo_store_cache_all: Arc::new(RwLock::new(Vec::new())),
+
+            promo_cache_by_voucher: Arc::new(RwLock::new(HashMap::new())),
+            store_cache_by_route: Arc::new(RwLock::new(HashMap::new())),
+            promo_store_cache_by_id: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub fn get_promo_cache_all(&self) -> Arc<RwLock<Vec<Promo>>> {
+        info!("Mendapatkan cache promo (all)...");
+        Arc::clone(&self.promo_cache_all)
+    }
+
+    pub fn get_store_cache_all(&self) -> Arc<RwLock<Vec<Store>>> {
+        info!("Mendapatkan cache store (all)...");
+        Arc::clone(&self.store_cache_all)
+    }
+
+    pub fn get_promo_store_cache_all(&self) -> Arc<RwLock<Vec<PromoStore>>> {
+        info!("Mendapatkan cache promo_store (all)...");
+        Arc::clone(&self.promo_store_cache_all)
+    }
+
+    pub async fn get_promo_cache_by_voucher(&self, voucher: &str) -> Option<Promo> {
+        let cache = self.promo_cache_by_voucher.read().await;
+        info!("Mendapatkan cache promo (by voucher)...");
+        cache.get(voucher).cloned()
+    }
+
+    pub async fn get_store_cache_by_route(&self, route: &str) -> Option<Store> {
+        let cache = self.store_cache_by_route.read().await;
+        info!("Mendapatkan cache store (by route)...");
+        cache.get(route).cloned()
+    }
+
+    pub async fn get_promo_store_cache_by_id(&self, id: &u32) -> Option<PromoStore> {
+        let cache = self.promo_store_cache_by_id.read().await;
+        info!("Mendapatkan cache promo_store (by id)...");
+        cache.get(&id.to_string()).cloned()
+    }
+
+    pub async fn save_promo_cache_all(&self, promos: Vec<Promo>) {
+        let mut cache = self.promo_cache_all.write().await;
+        *cache = promos;
+
+        info!("Menyimpan cache promo (all)...");
+
+        // Membagi data
+        let mut cache_by_voucher = self.promo_cache_by_voucher.write().await;
+        info!("Memperbarui cache promo (by voucher)...");
+        cache_by_voucher.clear();
+        for promo in cache.iter() {
+            cache_by_voucher.insert(promo.voucher_code.clone(), promo.clone());
+        }
+        info!(
+            "Cache promo (by voucher) diperbarui dengan {} entri.",
+            cache_by_voucher.len()
+        );
+    }
+
+    pub async fn save_store_cache_all(&self, stores: Vec<Store>) {
+        let mut cache = self.store_cache_all.write().await;
+        *cache = stores;
+        info!("Menyimpan cache store (all)...");
+
+        // Update cache by route
+        let mut cache_by_route = self.store_cache_by_route.write().await;
+        info!("Memperbarui cache store (by route)...");
+        cache_by_route.clear();
+        for store in cache.iter() {
+            if let Some(route) = &store.route {
+                cache_by_route.insert(route.clone(), store.clone());
+            }
+        }
+        info!(
+            "Cache store (by route) diperbarui dengan {} entri.",
+            cache_by_route.len()
+        );
+    }
+
+    pub async fn save_promo_store_cache_all(&self, promo_stores: Vec<PromoStore>) {
+        let mut cache = self.promo_store_cache_all.write().await;
+        *cache = promo_stores;
+        info!("Menyimpan cache promo_store (all)...");
+
+        // Update cache by id
+        let mut cache_by_id = self.promo_store_cache_by_id.write().await;
+        info!("Memperbarui cache promo_store (by id)...");
+        cache_by_id.clear();
+        for promo_store in cache.iter() {
+            cache_by_id.insert(promo_store.id.to_string(), promo_store.clone());
+        }
+        info!(
+            "Cache promo_store (by id) diperbarui dengan {} entri.",
+            cache_by_id.len()
+        );
+    }
+
+    pub async fn clear_promo_cache_all(&self) {
+        let mut cache = self.promo_cache_all.write().await;
+        cache.clear();
+        info!("Menghapus cache promo (all)...");
+    }
+    pub async fn clear_store_cache_all(&self) {
+        let mut cache = self.store_cache_all.write().await;
+        cache.clear();
+        info!("Menghapus cache store (all)...");
+    }
+    pub async fn clear_promo_store_cache_all(&self) {
+        let mut cache = self.promo_store_cache_all.write().await;
+        cache.clear();
+        info!("Menghapus cache promo_store (all)...");
+    }
+}
