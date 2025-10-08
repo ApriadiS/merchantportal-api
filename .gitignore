@@ -1,0 +1,22 @@
+/target
+# Untuk aplikasi Rust, Cargo.lock sebaiknya tetap di-track
+# Build scripts
+/build*.ps1
+# VSCode
+/.vscode/
+# OS/Editor
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+# Rust coverage
+/coverage/
+# Logs
+*.log
+# Rust build artifacts
+*.rlib
+*.rmeta
+# JetBrains IDE
+/.idea/
+.env
+.github
