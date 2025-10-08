@@ -30,6 +30,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get clean
 # Pastikan 'merchantportal-api' sesuai dengan nama [package] di Cargo.toml
 COPY --from=builder /usr/src/app/target/release/merchantportal-api .
 
+RUN chmod +x ./merchantportal-api
 # Beri tahu Docker bahwa aplikasi kita akan berjalan di port 3000
 EXPOSE 3000
 
