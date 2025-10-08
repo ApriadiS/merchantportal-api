@@ -1,5 +1,6 @@
-use axum::{Router, middleware::from_fn_with_state, routing::get}; // <-- PERBAIKAN 1
+use axum::{Router, middleware::from_fn_with_state, routing::get};
 use std::sync::Arc;
+use tracing::info; // <-- PERBAIKAN 1
 
 use crate::app_state::AppState;
 use handlers::promo_handler::{han_get_all_promos, han_get_promo_by_voucher};
@@ -32,6 +33,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let supabase_client = Arc::new(create_server());
+    info!("Supabase client created successfully."); // <-- PERBAIKAN 2
     let cache_repository = Arc::new(CacheRepository::new());
 
     let promo_repo = Arc::new(PromoRepository::new(
@@ -46,6 +48,8 @@ async fn main() {
         Arc::clone(&supabase_client),
         Arc::clone(&cache_repository),
     ));
+
+    info!("Repositories initialized successfully.");
 
     startup::init_cache(
         Arc::clone(&promo_repo),

@@ -13,6 +13,15 @@ pub async fn init_cache(
     promo_store_repo: Arc<PromoStoreRepository>,
 ) {
     info!("🚀 Memulai proses inisialisasi cache (Cache Warming)...");
+    info!(
+        "Check env SUPABASE_URL: {}",
+        std::env::var("SUPABASE_URL").unwrap_or_else(|_| "Not Set".to_string())
+    );
+    info!(
+        "Check env SUPABASE_KEY: {}",
+        std::env::var("SUPABASE_KEY").unwrap_or_else(|_| "Not Set".to_string())
+    );
+    info!("Mengambil data dari Supabase untuk mengisi cache...");
 
     // Jalankan semua proses fetching secara bersamaan
     let (promo_result, store_result, promo_store_result) = tokio::join!(
