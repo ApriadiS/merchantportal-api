@@ -27,7 +27,7 @@ mod supabase;
 
 use crate::supabase::server::create_server;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
@@ -64,6 +64,7 @@ async fn main() {
     let promo_store_service = PromoStoreService::new(promo_store_repo);
 
     let state = Arc::new(AppState {
+        cache_repository,
         promo_service,
         store_service,
         promo_store_service,

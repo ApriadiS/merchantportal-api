@@ -1,3 +1,4 @@
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -8,6 +9,35 @@ use crate::repositories::promo_store_repository::PromoStore;
 use crate::repositories::store_repository::Store;
 
 #[derive(Clone)]
+pub struct Token {
+    pub token: String,
+    pub expiry: chrono::DateTime<chrono::Utc>,
+    // optional cached claims stored as JSON to avoid depending on middleware types
+    pub claims: Option<JsonValue>,
+}
+
+#[derive(Clone)]
+pub struct AuthTokenCache {
+    pub token: HashMap<String, Token>,
+}
+
+impl AuthTokenCache {
+    pub fn new() -> Self {
+        Self {
+            token: HashMap::new(),
+        }
+    }
+
+    pub fn is_valid(&self, key: &str) -> bool {
+        if let Some(token) = self.token.get(key) {
+            chrono::Utc::now() < token.expiry
+        } else {
+            false
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct CacheRepository {
     promo_cache_all: Arc<RwLock<Vec<Promo>>>,
     store_cache_all: Arc<RwLock<Vec<Store>>>,
@@ -16,8 +46,9 @@ pub struct CacheRepository {
     promo_cache_by_voucher: Arc<RwLock<HashMap<String, Promo>>>,
     store_cache_by_route: Arc<RwLock<HashMap<String, Store>>>,
     promo_store_cache_by_id: Arc<RwLock<HashMap<String, PromoStore>>>,
-}
 
+    auth_token_cache: Arc<RwLock<Option<AuthTokenCache>>>,
+}
 impl CacheRepository {
     pub fn new() -> Self {
         Self {
@@ -28,7 +59,61 @@ impl CacheRepository {
             promo_cache_by_voucher: Arc::new(RwLock::new(HashMap::new())),
             store_cache_by_route: Arc::new(RwLock::new(HashMap::new())),
             promo_store_cache_by_id: Arc::new(RwLock::new(HashMap::new())),
+
+            auth_token_cache: Arc::new(RwLock::new(None)),
         }
+    }
+
+    pub fn get_auth_token_cache_ref(&self) -> &Arc<RwLock<Option<AuthTokenCache>>> {
+        &self.auth_token_cache
+    }
+
+    pub async fn get_auth_token_cache(&self, token: String) -> bool {
+        let cache = self.auth_token_cache.read().await;
+        info!("Mendapatkan cache auth token...");
+        cache.as_ref().map(|c| c.is_valid(&token)).unwrap_or(false)
+    }
+
+    /// Return cached claims (JSON) if token exists and is still valid
+    pub async fn get_cached_claims(&self, token: &str) -> Option<JsonValue> {
+        let cache = self.auth_token_cache.read().await;
+        if let Some(auth) = cache.as_ref() {
+            if let Some(t) = auth.token.get(token) {
+                if chrono::Utc::now() < t.expiry {
+                    return t.claims.clone();
+                }
+            }
+        }
+        None
+    }
+
+    /// Save a token with expiry and optional claims into the cache
+    pub async fn save_token_claims(
+        &self,
+        token: String,
+        claims: Option<JsonValue>,
+        expiry: chrono::DateTime<chrono::Utc>,
+    ) {
+        let mut cache = self.auth_token_cache.write().await;
+        let mut auth = cache.take().unwrap_or(AuthTokenCache {
+            token: HashMap::new(),
+        });
+        auth.token.insert(
+            token.clone(),
+            Token {
+                token,
+                expiry,
+                claims,
+            },
+        );
+        *cache = Some(auth);
+        info!("Saved token claims into cache");
+    }
+
+    pub async fn save_auth_token_cache(&self, new_cache: AuthTokenCache) {
+        let mut cache = self.auth_token_cache.write().await;
+        *cache = Some(new_cache);
+        info!("Menyimpan cache auth token...");
     }
 
     pub fn get_promo_cache_all(&self) -> Arc<RwLock<Vec<Promo>>> {

@@ -3,7 +3,7 @@ use crate::repositories::cache_repository::CacheRepository;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use supabase_rs::SupabaseClient;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum StoreType {
@@ -58,7 +58,7 @@ impl StoreRepository {
             .map_err(|e| AppError::Internal(format!("Supabase error: {}", e)))?;
 
         if stores_from_db.is_empty() {
-            println!("WARN: Tidak ada store yang ditemukan di Supabase.");
+            warn!("Tidak ada store yang ditemukan di Supabase.");
             return Err(AppError::NotFound(
                 "Tidak ada store yang ditemukan.".to_string(),
             ));
@@ -105,8 +105,8 @@ impl StoreRepository {
             .map_err(|e| AppError::Internal(format!("Supabase error: {}", e)))?;
 
         if stores_from_db.is_empty() {
-            println!(
-                "WARN: Tidak ada store yang ditemukan di Supabase untuk route: {}",
+            warn!(
+                "Tidak ada store yang ditemukan di Supabase untuk route: {}",
                 route
             );
             return Err(AppError::NotFound(format!(

@@ -3,7 +3,7 @@ use crate::repositories::cache_repository::CacheRepository;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use supabase_rs::SupabaseClient;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PromoStore {
@@ -49,7 +49,7 @@ impl PromoStoreRepository {
             .map_err(|e| AppError::Internal(format!("Supabase error: {}", e)))?;
 
         if promo_stores_from_db.is_empty() {
-            println!("WARN: Tidak ada promo_store yang ditemukan di Supabase.");
+            warn!("Tidak ada promo_store yang ditemukan di Supabase.");
             return Err(AppError::NotFound(
                 "Tidak ada promo_store yang ditemukan.".to_string(),
             ));
@@ -93,8 +93,8 @@ impl PromoStoreRepository {
             .map_err(|e| AppError::Internal(format!("Supabase error: {}", e)))?;
 
         if promos_from_db.is_empty() {
-            println!(
-                "WARN: Tidak ada promo_store yang ditemukan di Supabase untuk id {}.",
+            warn!(
+                "Tidak ada promo_store yang ditemukan di Supabase untuk id {}.",
                 id
             );
             return Err(AppError::NotFound(format!(
