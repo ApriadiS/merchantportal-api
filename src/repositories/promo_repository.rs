@@ -1,8 +1,10 @@
 use crate::error::AppError;
 use crate::repositories::cache_repository::CacheRepository;
+use crate::supabase::SupabaseClient;
+use crate::supabase::error::SupabaseError;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::sync::Arc;
-use supabase_rs::SupabaseClient;
 use tracing::{info, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -63,10 +65,16 @@ impl PromoRepository {
         // Untuk demo, kita buat data palsu seolah-olah dari Supabase:
         let promos_from_db = self
             .supabase_client
-            .from("promo")
+            .from::<Value>("promo")
             .execute()
             .await
-            .map_err(|e| AppError::Internal(format!("Supabase error: {}", e)))?;
+            .map_err(|e: SupabaseError| {
+                if e.is_not_found() {
+                    AppError::NotFound("Tidak ada promo yang ditemukan.".to_string())
+                } else {
+                    AppError::Internal(format!("Supabase error: {}", e))
+                }
+            })?;
 
         if promos_from_db.is_empty() {
             warn!("Tidak ada promo yang ditemukan di Supabase.");
@@ -115,11 +123,20 @@ impl PromoRepository {
 
         let promos_from_db = self
             .supabase_client
-            .from("promo")
+            .from::<Value>("promo")
             .eq("voucher_code", voucher)
             .execute()
             .await
-            .map_err(|e| AppError::Internal(format!("Supabase error: {}", e)))?;
+            .map_err(|e: SupabaseError| {
+                if e.is_not_found() {
+                    AppError::NotFound(format!(
+                        "Promo dengan voucher_code '{}' tidak ditemukan.",
+                        voucher
+                    ))
+                } else {
+                    AppError::Internal(format!("Supabase error: {}", e))
+                }
+            })?;
 
         if promos_from_db.is_empty() {
             warn!(
