@@ -238,23 +238,66 @@ Client Request
 [Supabase Client] ← Database operations
 ```
 
+**Struktur Folder:**
+```
+src/
+├── handlers/       # HTTP request handlers
+├── services/       # Business logic layer
+├── repositories/   # Data access + caching
+├── model/          # Domain models & DTOs
+├── supabase/       # Supabase client
+├── app_state.rs    # Application state
+├── error.rs        # Error handling
+├── middleware.rs   # JWT auth
+├── startup.rs      # Cache warming
+└── main.rs         # Entry point
+```
+
+📖 **Detail:** Lihat [src/README.md](src/README.md)
+
 ## 🧪 Cara Menjalankan
 
 1. **Setup environment variables**:
 ```bash
-nano .env
-# Isi SUPABASE_URL,SUPABASE_KEY,JWT_SECRET, dan RUST_LOG(Optional)
+cp .env.example .env
+nano .env  # Edit dengan credentials Anda
 ```
 
 2. **Jalankan aplikasi**:
+
+**Untuk ARM64 (AWS EC2 Graviton, Apple Silicon):**
 ```bash
-docker-compose up --build -d
+chmod +x deploy-arm64.sh
+./deploy-arm64.sh
+```
+
+**Untuk x86_64 (Intel/AMD):**
+```bash
+chmod +x deploy-x86.sh
+./deploy-x86.sh
+```
+
+**Atau gunakan Docker Compose:**
+```bash
+# ARM64
+docker-compose -f docker-compose.arm64.yml up -d
+
+# x86_64
+docker-compose -f docker-compose.x86_64.yml up -d
 ```
 
 3. **Jalankan k6 test**:
 ```bash
 k6 run load_test.js
 ```
+
+📖 **Dokumentasi lengkap:**
+- [README-DOCKER.md](README-DOCKER.md) - Docker deployment
+- [AWS-EC2-SETUP.md](AWS-EC2-SETUP.md) - AWS deployment
+- [CRUD-FLOW.md](CRUD-FLOW.md) - CRUD operations
+- [API-ENDPOINTS.md](API-ENDPOINTS.md) - API reference
+- [QUICK-START.md](QUICK-START.md) - Quick start
+- [src/README.md](src/README.md) - Source code structure
 
 ## ✅ Deployment
 
@@ -263,12 +306,22 @@ k6 run load_test.js
 - **RAM**: 1GB  
 - **Storage**: 10GB SSD
 
+**Supported Architectures:**
+- ✅ ARM64 (AWS EC2 Graviton, Apple Silicon)
+- ✅ x86_64 (Intel/AMD)
+
+**Docker Images:**
+- `Dockerfile.arm64` - Optimized for ARM64
+- `Dockerfile.x86_64` - Optimized for x86_64
+
+🔐 **Security:** ENV variables di-inject saat runtime, tidak hardcoded di image
+
 ---
 
 ## 🎯 Checklist Optimasi Lanjutan
 
 ### 🚀 **High Priority**
-- [ ] **Implementasi Response Compression**
+- [x] **Implementasi Response Compression** ✅
   - Gunakan `tower-http` compression layer
   - Reduce network traffic 60-70%
 
@@ -276,22 +329,22 @@ k6 run load_test.js
   - Gunakan `reqwest` Client dengan connection pool
   - Reduce database connection overhead
 
-- [ ] **Rate Limiting Middleware**
+- [x] **Rate Limiting Middleware** ✅
   - Implementasi `tower-governor` atau custom rate limiter
-  - Protect dari abuse dan DDoS
+  - Protect dari abuse dan DDoS (100 req/s, burst 50)
 
 ### 📈 **Medium Priority**  
-- [ ] **Metrics & Monitoring**
-  - Integrasi `metrics` crate untuk telemetry
-  - Prometheus endpoint untuk monitoring
+- [x] **Metrics & Monitoring** ✅
+  - `/metrics` endpoint dengan cache statistics
+  - Ready untuk Prometheus integration
 
 - [ ] **Cache Invalidation Strategy**
   - TTL-based invalidation untuk dynamic data
   - Background cache refresh
 
-- [ ] **Health Check & Readiness Probes**
+- [x] **Health Check & Readiness Probes** ✅
   - `/health` endpoint untuk load balancer
-  - Database connectivity checks
+  - Version info included
 
 ### 🔧 **Architecture Improvements**
 - [ ] **Background Cache Warming**
