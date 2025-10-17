@@ -330,8 +330,8 @@ k6 run load_test.js
   - Reduce database connection overhead
 
 - [x] **Rate Limiting Middleware** ✅
-  - Implementasi `tower-governor` atau custom rate limiter
-  - Protect dari abuse dan DDoS (100 req/s, burst 50)
+  - Implementasi `axum-governor` dengan lazy-limit
+  - Protect dari abuse dan DDoS (100 req/s)
 
 ### 📈 **Medium Priority**  
 - [x] **Metrics & Monitoring** ✅

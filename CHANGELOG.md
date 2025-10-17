@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 - ✅ Health check endpoint (`/health`)
 - ✅ Metrics endpoint (`/metrics`) - cache statistics
 - ✅ Response compression (gzip)
-- ✅ Rate limiting (100 req/s, burst 50)
+- ✅ Rate limiting (100 req/s with axum-governor)
 - ✅ Request body size limit (1MB)
 - ✅ JWT authentication with caching
 - ✅ In-memory caching with RwLock
