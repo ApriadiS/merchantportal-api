@@ -18,5 +18,23 @@ Thumbs.db
 *.rmeta
 # JetBrains IDE
 /.idea/
+
+# Environment variables (CRITICAL - NEVER COMMIT)
 .env
+.env.local
+.env.*.local
+
+# GitHub workflows (if contains secrets)
 .github
+
+# AWS credentials
+*.pem
+*.key
+aws-credentials.txt
+
+# Docker volumes
+docker-data/
+
+# Backup files
+*.bak
+*.backup
