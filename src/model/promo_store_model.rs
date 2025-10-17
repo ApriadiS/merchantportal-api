@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PromoStore {
-    pub id: i64,
     pub promo_id: i64,
     pub store_id: i64,
 }

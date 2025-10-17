@@ -19,7 +19,7 @@ use handlers::promo_handler::{
     han_update_promo,
 };
 use handlers::promo_store_handler::{
-    han_create_promo_store, han_delete_promo_store, han_get_promo_store_by_id,
+    han_create_promo_store, han_delete_promo_store, han_get_promo_store_by_key,
     han_get_promo_stores, han_update_promo_store,
 };
 use handlers::store_handler::{
@@ -110,16 +110,16 @@ async fn main() {
     let promo_store_route = Router::new()
         .route("/get-promo-store", get(han_get_promo_stores))
         .route(
-            "/get-promo-store/{promo_store_id}",
-            get(han_get_promo_store_by_id),
+            "/get-promo-store/{key}",
+            get(han_get_promo_store_by_key),
         )
         .route("/create-promo-store", post(han_create_promo_store))
         .route(
-            "/update-promo-store/{promo_store_id}",
+            "/update-promo-store/{key}",
             put(han_update_promo_store),
         )
         .route(
-            "/delete-promo-store/{promo_store_id}",
+            "/delete-promo-store/{key}",
             delete(han_delete_promo_store),
         );
 

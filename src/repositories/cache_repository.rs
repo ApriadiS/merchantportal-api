@@ -45,7 +45,7 @@ pub struct CacheRepository {
 
     promo_cache_by_voucher: Arc<RwLock<HashMap<String, Promo>>>,
     store_cache_by_route: Arc<RwLock<HashMap<String, Store>>>,
-    promo_store_cache_by_id: Arc<RwLock<HashMap<String, PromoStore>>>,
+    promo_store_cache_by_key: Arc<RwLock<HashMap<String, PromoStore>>>,
 
     auth_token_cache: Arc<RwLock<Option<AuthTokenCache>>>,
 }
@@ -58,7 +58,7 @@ impl CacheRepository {
 
             promo_cache_by_voucher: Arc::new(RwLock::new(HashMap::new())),
             store_cache_by_route: Arc::new(RwLock::new(HashMap::new())),
-            promo_store_cache_by_id: Arc::new(RwLock::new(HashMap::new())),
+            promo_store_cache_by_key: Arc::new(RwLock::new(HashMap::new())),
 
             auth_token_cache: Arc::new(RwLock::new(None)),
         }
@@ -143,10 +143,11 @@ impl CacheRepository {
         cache.get(route).cloned()
     }
 
-    pub async fn get_promo_store_cache_by_id(&self, id: &u32) -> Option<PromoStore> {
-        let cache = self.promo_store_cache_by_id.read().await;
-        info!("Mendapatkan cache promo_store (by id)...");
-        cache.get(&id.to_string()).cloned()
+    pub async fn get_promo_store_cache_by_key(&self, promo_id: i64, store_id: i64) -> Option<PromoStore> {
+        let cache = self.promo_store_cache_by_key.read().await;
+        info!("Mendapatkan cache promo_store (by key)...");
+        let key = format!("{}-{}", promo_id, store_id);
+        cache.get(&key).cloned()
     }
 
     pub async fn save_promo_cache_all(&self, promos: Vec<Promo>) {
@@ -193,16 +194,17 @@ impl CacheRepository {
         *cache = promo_stores;
         info!("Menyimpan cache promo_store (all)...");
 
-        // Update cache by id
-        let mut cache_by_id = self.promo_store_cache_by_id.write().await;
-        info!("Memperbarui cache promo_store (by id)...");
-        cache_by_id.clear();
+        // Update cache by composite key
+        let mut cache_by_key = self.promo_store_cache_by_key.write().await;
+        info!("Memperbarui cache promo_store (by key)...");
+        cache_by_key.clear();
         for promo_store in cache.iter() {
-            cache_by_id.insert(promo_store.id.to_string(), promo_store.clone());
+            let key = format!("{}-{}", promo_store.promo_id, promo_store.store_id);
+            cache_by_key.insert(key, promo_store.clone());
         }
         info!(
-            "Cache promo_store (by id) diperbarui dengan {} entri.",
-            cache_by_id.len()
+            "Cache promo_store (by key) diperbarui dengan {} entri.",
+            cache_by_key.len()
         );
     }
 

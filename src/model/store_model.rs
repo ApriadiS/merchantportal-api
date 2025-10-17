@@ -50,7 +50,7 @@ pub enum StoreType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Store {
-    pub id: u64,
+    pub id: i64,
     pub name: String,
     pub company: String,
     pub address: String,
