@@ -1,34 +1,11 @@
 use crate::error::AppError;
+use crate::model::promo_model::*;
 use crate::repositories::cache_repository::CacheRepository;
 use crate::supabase::SupabaseClient;
 use crate::supabase::error::SupabaseError;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{info, warn};
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum AdminPromoType {
-    FIX,
-    PERCENT,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Promo {
-    pub id_promo: i64,
-    pub title_promo: String,
-    pub start_date_promo: String,
-    pub end_date_promo: String,
-    pub is_active: bool,
-    pub voucher_code: String,
-    pub min_transaction_promo: f64,
-    pub admin_promo_type: AdminPromoType,
-    pub admin_promo: f64,
-    pub interest_rate: f64,
-    pub tenor_promo: i64,
-    pub subsidi_promo: f64,
-    pub free_installment: i64,
-}
 
 #[derive(Clone)]
 pub struct PromoRepository {
@@ -158,5 +135,105 @@ impl PromoRepository {
             .map_err(|e| AppError::Internal(format!("Deserialization error: {}", e)))?;
 
         Ok(promo)
+    }
+
+    pub async fn rep_insert(&self, payload: &serde_json::Value) -> Result<Promo, AppError> {
+        // Use supabase client insert helper
+        let inserted: Promo = self
+            .supabase_client
+            .from::<Promo>("promo")
+            .insert(payload)
+            .await
+            .map_err(|e| AppError::Internal(format!("Supabase insert error: {}", e)))?;
+
+        // Clear cache to force refresh
+        self.cache_repository.clear_promo_cache_all().await;
+        Ok(inserted)
+    }
+
+    pub async fn rep_update_by_voucher(
+        &self,
+        voucher: &str,
+        payload: &serde_json::Value,
+    ) -> Result<Promo, AppError> {
+        // Ambil id dari cache berdasarkan voucher jika ada
+        if let Some(cached_promo) = self
+            .cache_repository
+            .get_promo_cache_by_voucher(voucher)
+            .await
+        {
+            info!(
+                "Cache Promo Ditemukan (Cache Hit)! Menggunakan cached id: {}",
+                cached_promo.id_promo
+            );
+        } else {
+            info!(
+                "Cache Promo Tidak Ditemukan (Cache Miss). Menghubungi Supabase untuk mendapatkan id..."
+            );
+            // Jika tidak ada di cache, ambil dari Supabase
+            let promo = match self.rep_get_by_voucher(voucher).await {
+                Ok(p) => p,
+                Err(e) => {
+                    return Err(AppError::NotFound(format!(
+                        "Promo dengan voucher_code '{}' tidak ditemukan untuk update. Error: {}",
+                        voucher, e
+                    )));
+                }
+            };
+            info!("Ditemukan promo di Supabase dengan id: {}", promo.id_promo);
+        }
+
+        // Update berdasarkan id yang didapat
+        let id_promo = if let Some(cached_promo) = self
+            .cache_repository
+            .get_promo_cache_by_voucher(voucher)
+            .await
+        {
+            cached_promo.id_promo
+        } else {
+            let promo = self.rep_get_by_voucher(voucher).await?;
+            promo.id_promo
+        };
+
+        let updated_vec = self
+            .supabase_client
+            .from::<Promo>("promo")
+            .eq("id_promo", id_promo.to_string().as_str())
+            .update(payload)
+            .await
+            .map_err(|e| AppError::Internal(format!("Supabase update error: {}", e)))?;
+
+        // Clear cache
+        self.cache_repository.clear_promo_cache_all().await;
+
+        updated_vec
+            .into_iter()
+            .next()
+            .ok_or_else(|| AppError::Internal("Failed to update promo".to_string()))
+    }
+
+    pub async fn rep_delete_by_voucher(&self, voucher: &str) -> Result<(), AppError> {
+        // Get ID from cache or DB
+        let id_promo = if let Some(cached_promo) = self
+            .cache_repository
+            .get_promo_cache_by_voucher(voucher)
+            .await
+        {
+            cached_promo.id_promo
+        } else {
+            let promo = self.rep_get_by_voucher(voucher).await?;
+            promo.id_promo
+        };
+
+        let _deleted = self
+            .supabase_client
+            .from::<Promo>("promo")
+            .eq("id_promo", id_promo.to_string().as_str())
+            .delete()
+            .await
+            .map_err(|e| AppError::Internal(format!("Supabase delete error: {}", e)))?;
+
+        self.cache_repository.clear_promo_cache_all().await;
+        Ok(())
     }
 }

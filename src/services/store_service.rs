@@ -1,6 +1,6 @@
 use crate::error::AppError;
-use crate::handlers::store_handler::{CreateStorePayload, UpdateStorePayload};
-use crate::repositories::store_repository::{Store, StoreRepository};
+use crate::model::store_model::{CreateStorePayload, Store, UpdateStorePayload};
+use crate::repositories::store_repository::StoreRepository;
 use std::sync::Arc;
 
 pub struct StoreService {

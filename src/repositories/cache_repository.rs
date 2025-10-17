@@ -4,9 +4,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::repositories::promo_repository::Promo;
-use crate::repositories::promo_store_repository::PromoStore;
-use crate::repositories::store_repository::Store;
+use crate::model::promo_model::Promo;
+use crate::model::promo_store_model::PromoStore;
+use crate::model::store_model::Store;
 
 #[derive(Clone)]
 pub struct Token {

@@ -1,18 +1,11 @@
 use crate::error::AppError;
+use crate::model::promo_store_model::PromoStore;
 use crate::repositories::cache_repository::CacheRepository;
 use crate::supabase::SupabaseClient;
 use crate::supabase::error::SupabaseError;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{info, warn};
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PromoStore {
-    pub id: i64,
-    pub promo_id: i64,
-    pub store_id: i64,
-}
 
 #[derive(Clone)]
 pub struct PromoStoreRepository {
@@ -129,5 +122,51 @@ impl PromoStoreRepository {
             .map_err(|e| AppError::Internal(format!("Deserialization error: {}", e)))?;
 
         Ok(promo)
+    }
+
+    pub async fn rep_insert(&self, payload: &serde_json::Value) -> Result<PromoStore, AppError> {
+        let inserted: PromoStore = self
+            .supabase_client
+            .from::<PromoStore>("promo_store")
+            .insert(payload)
+            .await
+            .map_err(|e| AppError::Internal(format!("Supabase insert error: {}", e)))?;
+
+        self.cache_repository.clear_promo_store_cache_all().await;
+        Ok(inserted)
+    }
+
+    pub async fn rep_update_by_id(
+        &self,
+        id: &u32,
+        payload: &serde_json::Value,
+    ) -> Result<PromoStore, AppError> {
+        let updated_vec = self
+            .supabase_client
+            .from::<PromoStore>("promo_store")
+            .eq("id", &id.to_string())
+            .update(payload)
+            .await
+            .map_err(|e| AppError::Internal(format!("Supabase update error: {}", e)))?;
+
+        self.cache_repository.clear_promo_store_cache_all().await;
+
+        updated_vec
+            .into_iter()
+            .next()
+            .ok_or_else(|| AppError::Internal("Failed to update promo_store".to_string()))
+    }
+
+    pub async fn rep_delete_by_id(&self, id: &u32) -> Result<(), AppError> {
+        let _deleted = self
+            .supabase_client
+            .from::<PromoStore>("promo_store")
+            .eq("id", &id.to_string())
+            .delete()
+            .await
+            .map_err(|e| AppError::Internal(format!("Supabase delete error: {}", e)))?;
+
+        self.cache_repository.clear_promo_store_cache_all().await;
+        Ok(())
     }
 }

@@ -1,28 +1,14 @@
-use crate::handlers::store_handler::{UpdateStorePayload, UpdateStorePayloadWithID};
+use crate::error::AppError;
+use crate::model::store_model::*;
+use crate::model::store_model::{
+    CreateStorePayload, Store, UpdateStorePayload, UpdateStorePayloadWithID,
+};
 use crate::repositories::cache_repository::CacheRepository;
 use crate::supabase::SupabaseClient;
 use crate::supabase::error::SupabaseError;
-use crate::{error::AppError, handlers::store_handler::CreateStorePayload};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{info, warn};
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum StoreType {
-    KA,
-    NKA,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Store {
-    pub id: u64,
-    pub name: String,
-    pub company: String,
-    pub address: String,
-    pub route: Option<String>,
-    pub store_type: Option<StoreType>,
-}
 
 #[derive(Clone)]
 pub struct StoreRepository {

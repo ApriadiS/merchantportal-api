@@ -1,52 +1,13 @@
 use crate::error::AppError;
-use crate::repositories::store_repository::Store;
-use crate::{app_state::AppState, repositories::store_repository::StoreType};
+use crate::model::store_model::Store;
+use crate::model::store_model::{CreateStorePayload, DeleteStorePayload, UpdateStorePayload};
+use crate::{app_state::AppState, model::store_model::StoreType};
 use axum::{
     Json,
     extract::{Path, State},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct CreateStorePayload {
-    pub name: String,
-    pub company: String,
-    pub address: String,
-    pub route: String,
-    pub store_type: StoreType,
-}
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct UpdateStorePayload {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub company: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub address: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub route: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub store_type: Option<StoreType>,
-}
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct UpdateStorePayloadWithID {
-    pub id: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub company: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub address: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub route: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub store_type: Option<StoreType>,
-}
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct DeleteStorePayload {
-    pub route: String,
-}
 
 pub async fn han_get_stores(
     State(state): State<Arc<AppState>>,

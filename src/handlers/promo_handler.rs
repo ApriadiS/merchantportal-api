@@ -1,6 +1,7 @@
 use crate::app_state::AppState;
 use crate::error::AppError;
-use crate::repositories::promo_repository::Promo;
+use crate::model::promo_model::Promo;
+use crate::model::promo_model::*;
 use axum::{
     Json,
     extract::{Path, State},
@@ -56,4 +57,60 @@ pub async fn han_get_promo_by_voucher(
     // if false { return Err(AppError::Internal("Internal error".to_string())); }
 
     Ok(Json(promo))
+}
+
+// Reuse payload types defined in services to avoid duplicate types
+
+pub async fn han_create_promo(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<CreatePromoPayload>,
+) -> Result<Json<Promo>, AppError> {
+    // Validate duplicate voucher
+    if let Ok(_) =
+        han_get_promo_by_voucher(State(state.clone()), Path(payload.voucher_code.clone())).await
+    {
+        return Err(AppError::BadRequest(format!(
+            "Promo with voucher '{}' already exists",
+            payload.voucher_code
+        )));
+    }
+
+    let created = state.promo_service.ser_create_promo(payload).await?;
+    Ok(Json(created))
+}
+
+pub async fn han_update_promo(
+    State(state): State<Arc<AppState>>,
+    Path(voucher): Path<String>,
+    Json(payload): Json<UpdatePromoPayload>,
+) -> Result<Json<Promo>, AppError> {
+    // Ensure exists
+    if let Err(_) = han_get_promo_by_voucher(State(state.clone()), Path(voucher.clone())).await {
+        return Err(AppError::NotFound(format!(
+            "Promo with voucher '{}' not found",
+            voucher
+        )));
+    }
+
+    let updated = state
+        .promo_service
+        .ser_update_promo(&voucher, payload)
+        .await?;
+    Ok(Json(updated))
+}
+
+pub async fn han_delete_promo(
+    State(state): State<Arc<AppState>>,
+    Path(voucher): Path<String>,
+) -> Result<Json<()>, AppError> {
+    // Ensure exists
+    if let Err(_) = han_get_promo_by_voucher(State(state.clone()), Path(voucher.clone())).await {
+        return Err(AppError::NotFound(format!(
+            "Promo with voucher '{}' not found",
+            voucher
+        )));
+    }
+
+    state.promo_service.ser_delete_promo(&voucher).await?;
+    Ok(Json(()))
 }
