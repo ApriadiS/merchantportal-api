@@ -14,11 +14,18 @@ use std::sync::Arc;
 use tracing::info; // <-- PERBAIKAN 1
 
 use crate::app_state::AppState;
-use handlers::promo_handler::{han_get_all_promos, han_get_promo_by_voucher};
-use handlers::promo_store_handler::{han_get_promo_store_by_id, han_get_promo_stores};
+use handlers::promo_handler::{
+    han_create_promo, han_delete_promo, han_get_all_promos, han_get_promo_by_voucher,
+    han_update_promo,
+};
+use handlers::promo_store_handler::{
+    han_create_promo_store, han_delete_promo_store, han_get_promo_store_by_id,
+    han_get_promo_stores, han_update_promo_store,
+};
 use handlers::store_handler::{
     han_create_store, han_delete_store, han_get_store_by_route, han_get_stores, han_update_store,
 };
+use handlers::health_handler::{health_check, metrics};
 use middleware::auth;
 use repositories::cache_repository::CacheRepository;
 use repositories::promo_repository::PromoRepository;
@@ -34,6 +41,7 @@ mod app_state;
 mod error;
 mod handlers;
 mod middleware;
+mod model;
 mod repositories;
 mod services;
 mod startup;
@@ -85,29 +93,51 @@ async fn main() {
         promo_store_service,
     });
 
-    let promo_route_get = Router::new()
+    let promo_route = Router::new()
         .route("/get-promo", get(han_get_all_promos))
-        .route("/get-promo/{voucher}", get(han_get_promo_by_voucher));
+        .route("/get-promo/{voucher}", get(han_get_promo_by_voucher))
+        .route("/create-promo", post(han_create_promo))
+        .route("/update-promo/{voucher}", put(han_update_promo))
+        .route("/delete-promo/{voucher}", delete(han_delete_promo));
 
-    let store_route_get = Router::new()
+    let store_route = Router::new()
         .route("/get-store", get(han_get_stores))
         .route("/get-store/{route}", get(han_get_store_by_route))
         .route("/create-store", post(han_create_store))
         .route("/update-store/{route}", put(han_update_store))
         .route("/delete-store/{route}", delete(han_delete_store));
 
-    let promo_store_route_get = Router::new()
+    let promo_store_route = Router::new()
         .route("/get-promo-store", get(han_get_promo_stores))
         .route(
             "/get-promo-store/{promo_store_id}",
             get(han_get_promo_store_by_id),
+        )
+        .route("/create-promo-store", post(han_create_promo_store))
+        .route(
+            "/update-promo-store/{promo_store_id}",
+            put(han_update_promo_store),
+        )
+        .route(
+            "/delete-promo-store/{promo_store_id}",
+            delete(han_delete_promo_store),
         );
 
+    lazy_limit::init_rate_limiter!(
+        default: lazy_limit::RuleConfig::new(lazy_limit::Duration::seconds(1), 100)
+    ).await;
+
     let app = Router::new()
-        .merge(promo_route_get)
-        .merge(store_route_get)
-        .merge(promo_store_route_get)
+        .route("/health", get(health_check))
+        .route("/metrics", get(metrics))
+        .merge(promo_route)
+        .merge(store_route)
+        .merge(promo_store_route)
         .route_layer(from_fn_with_state(state.clone(), auth))
+        .layer(tower_http::compression::CompressionLayer::new())
+        .layer(tower_http::limit::RequestBodyLimitLayer::new(1024 * 1024))
+        .layer(real::RealIpLayer::default())
+        .layer(axum_governor::GovernorLayer::default())
         .with_state(state);
 
     axum::serve(
