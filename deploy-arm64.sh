@@ -14,11 +14,26 @@ fi
 
 # Stop and remove existing container
 echo "🛑 Stopping existing container..."
-docker-compose -f docker-compose.arm64.yml down 2>/dev/null || true
+docker-compose -f docker-compose.arm64.yml down 2>&1 | while IFS= read -r line; do
+    echo "   $line"
+done || true
+echo "✅ Container stopped!"
 
-# Build and start
-echo "🔨 Building and starting container..."
-docker-compose -f docker-compose.arm64.yml up -d --build
+# Build image first (separate from docker-compose to save memory)
+echo "🔨 Building Docker image..."
+echo "⏳ This may take a few minutes..."
+docker build -f Dockerfile.arm64 -t merchantportal-api-arm64 . 2>&1 | while IFS= read -r line; do
+    echo "   $line"
+done
+echo "✅ Image built successfully!"
+
+# Start container with docker-compose
+echo ""
+echo "🚀 Starting container..."
+docker-compose -f docker-compose.arm64.yml up -d 2>&1 | while IFS= read -r line; do
+    echo "   $line"
+done
+echo "✅ Container started successfully!"
 
 echo "✅ Deployment complete!"
 echo "📊 Container status:"
