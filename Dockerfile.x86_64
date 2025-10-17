@@ -1,7 +1,7 @@
 # --- Tahap 1: Builder (x86_64) ---
 FROM rust:1.85.1-alpine AS builder
 
-RUN apk add --no-cache musl-dev openssl-dev pkgconf build-base perl make
+RUN apk add --no-cache musl-dev openssl-dev openssl-libs-static pkgconf build-base perl make
 
 WORKDIR /usr/src/app
 
@@ -14,6 +14,9 @@ RUN cargo build --release --target=x86_64-unknown-linux-musl
 COPY src ./src
 RUN touch src/main.rs
 RUN cargo build --release --target=x86_64-unknown-linux-musl
+
+
+
 
 # --- Tahap 2: Runner ---
 FROM alpine:latest

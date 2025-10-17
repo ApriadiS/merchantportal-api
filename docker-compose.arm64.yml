@@ -2,9 +2,6 @@ services:
   api:
     image: merchantportal-api-arm64
     container_name: merchantportal-api
-    build:
-      context: .
-      dockerfile: Dockerfile.arm64
     ports:
       - "3000:3000"
     environment:
