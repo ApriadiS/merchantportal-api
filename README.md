@@ -1,8 +1,10 @@
-# 🚀 Merchant Portal API
+# 🚀 Merchant Portal API v1.1.0
 
 Backend Rust yang dibangun dengan Axum, dirancang untuk menangani traffic tinggi dengan resource terbatas. Membuktikan bahwa dengan 2 core CPU dan 1GB RAM, kita bisa melayani ribuan user bersamaan tanpa masalah.
 
 <span style="color: gray;">Digunakan untuk melayani request data dari <a href="https://github.com/ApriadiS/merchantportal-client" style="color: #007acc; text-decoration: none;">Merchant Portal Client</a></span>
+
+---
 
 ## 📌 Tentang Proyek
 
@@ -15,6 +17,8 @@ API backend yang awalnya dibuat untuk eksplorasi Rust, berkembang menjadi solusi
 - **Authentication**: JWT dengan caching
 - **Database**: Supabase (PostgreSQL)
 - **Caching**: In-memory dengan RwLock
+
+---
 
 ## 🎯 Hasil Performance
 
@@ -31,186 +35,79 @@ Ringkasan hasil load testing dengan k6 pada environment lokal:
 
 **Sweet spot:** 1,500-2,000 user bersamaan dengan throughput ~4,700 req/s dan latency 136ms.
 
-## 🏆 Detail Load Testing
+---
 
-### Skrip Testing K6
+## 🆕 What's New in v1.1.0
 
-Berikut adalah skrip k6 yang digunakan untuk testing:
+### 1. Query Filtering Endpoints
+- ✅ `GET /get-promo?store_id={id}` - Filter promos by store (public)
+- ✅ `GET /get-promo-store?promo_id={id}` - Filter by promo (auth)
+- ✅ `GET /get-promo-store?store_id={id}` - Filter by store (auth)
 
-```javascript
-import http from "k6/http";
-import { check, sleep } from "k6";
-import { SharedArray } from "k6/data";
+### 2. Public Routes (No JWT Required)
+- ✅ `GET /get-store` - List all stores (homepage)
+- ✅ `GET /get-store/{route}` - Store details (store page)
+- ✅ `GET /get-promo?store_id={id}` - Promos for store (store page)
 
-const API_BASE_URL = "http://localhost:3000"; // Ganti dengan URL API kamu
-const JWT_TOKEN = "your_jwt_token_here";      // Ganti dengan token JWT valid
+### 3. Database Schema Update
+- ✅ Promo fields renamed (removed `_promo` suffix)
+- ✅ PromoStore now uses composite primary key `(promo_id, store_id)`
+- ✅ Added discount fields: `discount`, `discount_type`, `max_discount`
 
-const HEADERS = {
-   Authorization: `Bearer ${JWT_TOKEN}`,
-   "Content-Type": "application/json",
-};
+### 4. Breaking Changes
+- ⚠️ PromoStore endpoints now use format: `/get-promo-store/{promo_id}-{store_id}`
+- ⚠️ All promo field names changed (see schema update)
+- ⚠️ PromoStore response no longer includes `id` field
 
-export const options = {
-   stages: [
-      { duration: "30s", target: 200 },   // Warm up
-      { duration: "1m", target: 500 },    // Sustainable load
-      { duration: "1m", target: 1000 },   // High load
-      { duration: "1m", target: 1500 },   // Peak load
-      { duration: "30s", target: 0 },     // Cool down
-   ],
-   thresholds: {
-      http_req_duration: ["p(95)<1000"],  // 95% requests under 1 second
-      http_req_failed: ["rate<0.1"],      // Less than 10% failures
-   },
-};
+---
 
-// Load test data from CSV files
-const storeRoutes = new SharedArray("store routes", function () {
-   return loadAndExtractCSV("./store_rows.csv", "route");
-});
+## 📊 API Endpoints
 
-const promoVouchers = new SharedArray("promo vouchers", function () {
-   return loadAndExtractCSV("./promo_rows.csv", "voucher_code");
-});
+### 🌐 Public Endpoints (No Auth)
+| Method | Endpoint | Function |
+|--------|----------|----------|
+| GET | `/health` | Health check |
+| GET | `/metrics` | Monitoring metrics |
+| GET | `/get-store` | List all stores |
+| GET | `/get-store/{route}` | Store details |
+| GET | `/get-promo?store_id={id}` | Promos for store |
 
-const promoStoreIds = new SharedArray("promo store ids", function () {
-   return loadAndExtractCSV("./promo_store_rows.csv", "id");
-});
+### 🔐 Protected Endpoints (JWT Required)
+| Method | Endpoint | Function |
+|--------|----------|----------|
+| GET | `/get-promo` | List all promos |
+| GET | `/get-promo/{voucher}` | Promo by voucher |
+| POST | `/create-promo` | Create promo |
+| PUT | `/update-promo/{voucher}` | Update promo |
+| DELETE | `/delete-promo/{voucher}` | Delete promo |
+| POST | `/create-store` | Create store |
+| PUT | `/update-store/{route}` | Update store |
+| DELETE | `/delete-store/{route}` | Delete store |
+| GET | `/get-promo-store` | List all relations |
+| GET | `/get-promo-store?promo_id={id}` | Filter by promo |
+| GET | `/get-promo-store?store_id={id}` | Filter by store |
+| GET | `/get-promo-store/{promo_id}-{store_id}` | Get specific relation |
+| POST | `/create-promo-store` | Create relation |
+| PUT | `/update-promo-store/{promo_id}-{store_id}` | Update relation |
+| DELETE | `/delete-promo-store/{promo_id}-{store_id}` | Delete relation |
 
-// Helper function to load CSV data
-function loadAndExtractCSV(filename, columnName) {
-   const csvData = open(filename);
-   const lines = csvData.split("\n").filter((line) => line.trim() !== "");
+**Total**: 5 public + 15 protected = 20 endpoints
 
-   if (lines.length === 0) {
-      console.error(`ERROR: File ${filename} is empty.`);
-      return [];
-   }
-
-   const rawHeaders = lines[0].split(",");
-   const headers = rawHeaders.map((h) =>
-      h.trim().toLowerCase().replace(/"/g, "")
-   );
-   const dataRows = lines.slice(1);
-
-   const targetColumnName = columnName.toLowerCase();
-   const columnIndex = headers.indexOf(targetColumnName);
-
-   if (columnIndex === -1) {
-      console.error(
-         `ERROR: Column '${columnName}' not found in headers: ${rawHeaders.join(", ")}`
-      );
-      return [];
-   }
-
-   const extractedData = dataRows
-      .map((line) => {
-         const columns = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-         if (columns[columnIndex]) {
-            return columns[columnIndex].trim().replace(/"/g, "");
-         }
-         return null;
-      })
-      .filter((value) => value && String(value).trim() !== "");
-
-   return extractedData;
-}
-
-// Define API routes with parameterized endpoints
-const ROUTES = [
-   { name: "/get-promo", handler: () => "/get-promo" },
-   { name: "/get-store", handler: () => "/get-store" },
-   { name: "/get-promo-store", handler: () => "/get-promo-store" },
-   {
-      name: "/get-store/{route}",
-      handler: () => {
-         if (storeRoutes.length === 0) return "/get-store/placeholder";
-         const randomRoute = storeRoutes[Math.floor(Math.random() * storeRoutes.length)];
-         return `/get-store/${randomRoute}`;
-      },
-   },
-   {
-      name: "/get-promo/{voucher}",
-      handler: () => {
-         if (promoVouchers.length === 0) return "/get-promo/placeholder";
-         const randomVoucher = promoVouchers[Math.floor(Math.random() * promoVouchers.length)];
-         return `/get-promo/${randomVoucher}`;
-      },
-   },
-   {
-      name: "/get-promo-store/{promo_store_id}",
-      handler: () => {
-         if (promoStoreIds.length === 0) return "/get-promo-store/placeholder";
-         const randomPromoStoreId = promoStoreIds[Math.floor(Math.random() * promoStoreIds.length)];
-         return `/get-promo-store/${randomPromoStoreId}`;
-      },
-   },
-];
-
-// Select random route for each virtual user
-function getRandomRoute() {
-   const routeObject = ROUTES[Math.floor(Math.random() * ROUTES.length)];
-   const finalPath = routeObject.handler();
-   return {
-      route: routeObject.name,
-      url: `${API_BASE_URL}${finalPath}`,
-   };
-}
-
-// Main test function
-export default function () {
-   const { route: selectedRouteName, url } = getRandomRoute();
-   const res = http.get(url, { headers: HEADERS });
-
-   // Error logging for failed requests
-   if (res.status !== 200) {
-      console.error(`ERROR: Request to ${selectedRouteName} failed. Status: ${res.status}. URL: ${url}`);
-   }
-
-   // Performance checks
-   check(res, {
-      [`Accessed ${selectedRouteName} - Status is 200`]: (r) => r.status === 200,
-      "Authentication Success (not 401/403)": (r) => r.status !== 401 && r.status !== 403,
-      "Response time is acceptable": (r) => r.timings.duration < 1000,
-   });
-
-   sleep(0.1); // Small delay between requests
-}
-```
-
-### Data Testing
-
-Skrip ini membutuhkan file CSV berikut di folder yang sama:
-- `store_rows.csv` - dengan kolom `route`
-- `promo_rows.csv` - dengan kolom `voucher_code` 
-- `promo_store_rows.csv` - dengan kolom `id`
-
-**Cara menjalankan:**
-```bash
-k6 run load_test.js
-```
+---
 
 ## 🛠️ Optimasi yang Dilakukan
 
 ### **JWT Caching dengan Serialized Claims**
 Token JWT tidak didecode ulang setiap request. Claims disimpan sebagai JSON dan di-cache dengan expiry time berdasarkan token expiration.
 
-```rust
-// Cache lookup di middleware
-if let Some(cached) = state.cache_repository.get_cached_claims(&token).await {
-    if let Ok(claims) = serde_json::from_value::<Claims>(cached) {
-        request.extensions_mut().insert(Arc::new(claims));
-        return Ok(next.run(request).await);
-    }
-}
-```
-
 ### **In-Memory Data Caching**
 Data dari Supabase di-cache dalam memory menggunakan `RwLock` dan `HashMap`:
-
 - Cache semua data (promo, store, promo_store) di startup
-- Lookup cache per item (by voucher, route, ID)
+- Lookup cache per item (by voucher, route, composite key)
 - Automatic cache warming saat aplikasi mulai
+
+### **Public Routes Support**
+Middleware bypass JWT validation untuk public endpoints, memungkinkan user browse stores dan promos tanpa login.
 
 ### **Tokio Multi-thread Configuration**
 ```rust
@@ -218,16 +115,16 @@ Data dari Supabase di-cache dalam memory menggunakan `RwLock` dan `HashMap`:
 ```
 Konfigurasi worker thread yang sesuai dengan jumlah CPU core.
 
-## 📦 Arsitektur
+---
 
-Struktur yang clean dan maintainable:
+## 📦 Arsitektur
 
 ```
 Client Request 
     ↓
 [Axum Router] 
     ↓
-[JWT Middleware] ← Token validation dengan cache
+[JWT Middleware] ← Token validation dengan cache (skip untuk public routes)
     ↓  
 [Handler Layer] ← Request handling & response
     ↓
@@ -248,36 +145,38 @@ src/
 ├── supabase/       # Supabase client
 ├── app_state.rs    # Application state
 ├── error.rs        # Error handling
-├── middleware.rs   # JWT auth
+├── middleware.rs   # JWT auth + public routes
 ├── startup.rs      # Cache warming
 └── main.rs         # Entry point
 ```
 
 📖 **Detail:** Lihat [src/README.md](src/README.md)
 
-## 🧪 Cara Menjalankan
+---
 
-1. **Setup environment variables**:
+## 🧪 Quick Start
+
+### 1. Setup Environment
 ```bash
 cp .env.example .env
 nano .env  # Edit dengan credentials Anda
 ```
 
-2. **Jalankan aplikasi**:
+### 2. Run with Docker
 
-**Untuk ARM64 (AWS EC2 Graviton, Apple Silicon):**
+**ARM64 (AWS Graviton, Apple Silicon):**
 ```bash
 chmod +x deploy-arm64.sh
 ./deploy-arm64.sh
 ```
 
-**Untuk x86_64 (Intel/AMD):**
+**x86_64 (Intel/AMD):**
 ```bash
 chmod +x deploy-x86.sh
 ./deploy-x86.sh
 ```
 
-**Atau gunakan Docker Compose:**
+**Docker Compose:**
 ```bash
 # ARM64
 docker-compose -f docker-compose.arm64.yml up -d
@@ -286,22 +185,40 @@ docker-compose -f docker-compose.arm64.yml up -d
 docker-compose -f docker-compose.x86_64.yml up -d
 ```
 
-3. **Jalankan k6 test**:
+### 3. Test API
+
+**Public endpoints (no JWT):**
+```bash
+curl http://localhost:3000/get-store
+curl http://localhost:3000/get-store/toko-elektronik-jakarta
+curl http://localhost:3000/get-promo?store_id=1
+```
+
+**Protected endpoints (JWT required):**
+```bash
+curl http://localhost:3000/get-promo \
+  -H "Authorization: Bearer <jwt_token>"
+```
+
+---
+
+## 🧪 Load Testing
+
 ```bash
 k6 run load_test.js
 ```
 
-📖 **Dokumentasi lengkap:**
-- [README-DOCKER.md](README-DOCKER.md) - Docker deployment
-- [AWS-EC2-SETUP.md](AWS-EC2-SETUP.md) - AWS deployment
-- [CRUD-FLOW.md](CRUD-FLOW.md) - CRUD operations
-- [API-ENDPOINTS.md](API-ENDPOINTS.md) - API reference
-- [QUICK-START.md](QUICK-START.md) - Quick start
-- [src/README.md](src/README.md) - Source code structure
+Skrip k6 sudah include di repository dengan support untuk:
+- Multiple endpoints testing
+- CSV data loading
+- Performance thresholds
+- Error logging
+
+---
 
 ## ✅ Deployment
 
-**Minimum requirements:**
+**Minimum Requirements:**
 - **vCPUs**: 2
 - **RAM**: 1GB  
 - **Storage**: 10GB SSD
@@ -318,71 +235,73 @@ k6 run load_test.js
 
 ---
 
-## 🎯 Checklist Optimasi Lanjutan
+## 🎯 Features Checklist
 
-### 🚀 **High Priority**
-- [x] **Implementasi Response Compression** ✅
-  - Gunakan `tower-http` compression layer
-  - Reduce network traffic 60-70%
+### ✅ Implemented
+- [x] JWT Authentication dengan caching
+- [x] In-memory data caching (RwLock + HashMap)
+- [x] Response compression (gzip, 60-70% reduction)
+- [x] Rate limiting (100 req/s per IP)
+- [x] Health check & metrics endpoints
+- [x] Public routes support (no JWT for read-only)
+- [x] Query filtering endpoints
+- [x] Composite key support (PromoStore)
+- [x] Multi-architecture Docker images
 
-- [ ] **Connection Pooling untuk Supabase**
-  - Gunakan `reqwest` Client dengan connection pool
-  - Reduce database connection overhead
-
-- [x] **Rate Limiting Middleware** ✅
-  - Implementasi `axum-governor` dengan lazy-limit
-  - Protect dari abuse dan DDoS (100 req/s)
-
-### 📈 **Medium Priority**  
-- [x] **Metrics & Monitoring** ✅
-  - `/metrics` endpoint dengan cache statistics
-  - Ready untuk Prometheus integration
-
-- [ ] **Cache Invalidation Strategy**
-  - TTL-based invalidation untuk dynamic data
-  - Background cache refresh
-
-- [x] **Health Check & Readiness Probes** ✅
-  - `/health` endpoint untuk load balancer
-  - Version info included
-
-### 🔧 **Architecture Improvements**
-- [ ] **Background Cache Warming**
-  - Periodic cache refresh tanpa blocking requests
-  - Configurable refresh intervals
-
-- [ ] **Configuration Management**
-  - Environment-based config dengan validation
-  - Hot-reloadable configuration
-
-### 🛡️ **Production Ready**
-- [ ] **Graceful Shutdown**
-  - Proper signal handling (SIGTERM, SIGINT)
-  - In-flight request completion
-
-- [ ] **Security Hardening**
-  - CORS configuration
-  - Security headers middleware
-
-### 📊 **Advanced Performance**
-- [ ] **Load Shedding**
-  - Request queuing dengan max limits
-  - Circuit breaker pattern
-
-- [ ] **CDN Integration**
-  - Cache static responses at edge
-  - Reduce origin server load
-
-- [ ] **Horizontal Scaling Prep**
-  - Stateless application design
-  - External session storage (Redis)
+### 🔄 Planned
+- [ ] Connection pooling untuk Supabase
+- [ ] Cache invalidation strategy (TTL-based)
+- [ ] Background cache warming
+- [ ] Graceful shutdown
+- [ ] CORS configuration
+- [ ] Load shedding & circuit breaker
+- [ ] Horizontal scaling prep (Redis session)
 
 ---
 
-*Setiap checklist item bisa diimplementasikan secara incremental berdasarkan kebutuhan traffic dan resource constraints.* 
+## 📝 Environment Variables
 
-✅ Production Ready untuk 1,500-2,000 concurrent users  
+```bash
+# Database
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key
+
+# Authentication
+JWT_SECRET=your-jwt-secret
+
+# Application
+MODE=prod  # or 'dev' to bypass JWT
+RUST_LOG=info
+RUST_BACKTRACE=0
+```
 
 ---
+
+## 🚀 Performance Tips
+
+1. **Cache Warming**: Data di-cache saat startup untuk zero cold-start latency
+2. **JWT Caching**: Token claims di-cache untuk menghindari decode berulang
+3. **Public Routes**: Bypass JWT untuk read-only endpoints, reduce overhead
+4. **Compression**: Gzip enabled untuk semua responses
+5. **Rate Limiting**: Protect dari abuse dengan 100 req/s limit
+
+---
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/ApriadiS/merchantportal-api/issues)
+- **Frontend**: [Merchant Portal Client](https://github.com/ApriadiS/merchantportal-client)
+
+---
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details
+
+---
+
+**Version**: 1.1.0  
+**Last Updated**: 2025-01-17  
+**Status**: ✅ Production Ready
 
 *Dibangun dengan ❤️ menggunakan Rust + Axum + Tokio. Tested dengan k6.*
