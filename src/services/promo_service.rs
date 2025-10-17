@@ -22,6 +22,10 @@ impl PromoService {
     pub async fn ser_get_promo_by_voucher(&self, voucher: &str) -> Result<Option<Promo>, AppError> {
         self.repo.rep_get_by_voucher(voucher).await.map(Some)
     }
+
+    pub async fn ser_get_promos_by_store_id(&self, store_id: i64) -> Result<Vec<Promo>, AppError> {
+        self.repo.rep_get_by_store_id(store_id).await
+    }
 }
 
 impl PromoService {

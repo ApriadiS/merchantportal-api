@@ -164,7 +164,7 @@ impl PromoRepository {
         {
             info!(
                 "Cache Promo Ditemukan (Cache Hit)! Menggunakan cached id: {}",
-                cached_promo.id_promo
+                cached_promo.id
             );
         } else {
             info!(
@@ -180,25 +180,25 @@ impl PromoRepository {
                     )));
                 }
             };
-            info!("Ditemukan promo di Supabase dengan id: {}", promo.id_promo);
+            info!("Ditemukan promo di Supabase dengan id: {}", promo.id);
         }
 
         // Update berdasarkan id yang didapat
-        let id_promo = if let Some(cached_promo) = self
+        let id = if let Some(cached_promo) = self
             .cache_repository
             .get_promo_cache_by_voucher(voucher)
             .await
         {
-            cached_promo.id_promo
+            cached_promo.id
         } else {
             let promo = self.rep_get_by_voucher(voucher).await?;
-            promo.id_promo
+            promo.id
         };
 
         let updated_vec = self
             .supabase_client
             .from::<Promo>("promo")
-            .eq("id_promo", id_promo.to_string().as_str())
+            .eq("id", id.to_string().as_str())
             .update(payload)
             .await
             .map_err(|e| AppError::Internal(format!("Supabase update error: {}", e)))?;
@@ -214,26 +214,42 @@ impl PromoRepository {
 
     pub async fn rep_delete_by_voucher(&self, voucher: &str) -> Result<(), AppError> {
         // Get ID from cache or DB
-        let id_promo = if let Some(cached_promo) = self
+        let id = if let Some(cached_promo) = self
             .cache_repository
             .get_promo_cache_by_voucher(voucher)
             .await
         {
-            cached_promo.id_promo
+            cached_promo.id
         } else {
             let promo = self.rep_get_by_voucher(voucher).await?;
-            promo.id_promo
+            promo.id
         };
 
         let _deleted = self
             .supabase_client
             .from::<Promo>("promo")
-            .eq("id_promo", id_promo.to_string().as_str())
+            .eq("id", id.to_string().as_str())
             .delete()
             .await
             .map_err(|e| AppError::Internal(format!("Supabase delete error: {}", e)))?;
 
         self.cache_repository.clear_promo_cache_all().await;
         Ok(())
+    }
+
+    pub async fn rep_get_by_store_id(&self, store_id: i64) -> Result<Vec<Promo>, AppError> {
+        let cache = self.cache_repository.get_promo_store_cache_all();
+        let cache_data = cache.read().await;
+        let promo_ids: Vec<i64> = cache_data.iter().filter(|ps| ps.store_id == store_id).map(|ps| ps.promo_id).collect();
+        drop(cache_data);
+
+        if promo_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let promo_cache = self.cache_repository.get_promo_cache_all();
+        let promo_data = promo_cache.read().await;
+        let promos: Vec<Promo> = promo_data.iter().filter(|p| promo_ids.contains(&p.id)).cloned().collect();
+        Ok(promos)
     }
 }

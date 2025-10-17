@@ -4,28 +4,30 @@ use crate::model::promo_model::Promo;
 use crate::model::promo_model::*;
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
 };
+use serde::Deserialize;
 use std::sync::Arc;
 use tracing::info;
 
+#[derive(Deserialize)]
+pub struct PromoQuery {
+    pub store_id: Option<i64>,
+}
+
 pub async fn han_get_all_promos(
     State(state): State<Arc<AppState>>,
+    Query(query): Query<PromoQuery>,
 ) -> Result<Json<Vec<Promo>>, AppError> {
-    // Contoh error: Unauthorized
-    // if !authorized { return Err(AppError::Unauthorized); }
+    if let Some(store_id) = query.store_id {
+        let promos = state.promo_service.ser_get_promos_by_store_id(store_id).await?;
+        return Ok(Json(promos));
+    }
 
-    // Contoh error: NotFound
     let promos = state.promo_service.ser_get_all_promos().await?;
     if promos.is_empty() {
         return Err(AppError::NotFound("No promos found".to_string()));
     }
-
-    // Contoh error: BadRequest
-    // if false { return Err(AppError::BadRequest("Invalid query".to_string())); }
-
-    // Contoh error: Internal
-    // if false { return Err(AppError::Internal("Internal error".to_string())); }
 
     Ok(Json(promos))
 }

@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::State,
-    http::{Request, header},
+    http::{Request, header, Uri},
     middleware::Next,
     response::Response,
 };
@@ -31,9 +31,23 @@ pub async fn auth(
 
     if mode == "dev" {
         return Ok(next.run(request).await);
-    } else {
-        // 1. Ekstrak token dari header
-        let token = request
+    }
+
+    // Public routes - no JWT required
+    let uri = request.uri();
+    let path = uri.path();
+    
+    // Allow public access to specific routes
+    if path == "/get-promo" && uri.query().map_or(false, |q| q.contains("store_id=")) {
+        return Ok(next.run(request).await);
+    }
+    
+    if path == "/get-store" || path.starts_with("/get-store/") {
+        return Ok(next.run(request).await);
+    }
+
+    // 1. Ekstrak token dari header
+    let token = request
             .headers()
             .get(header::AUTHORIZATION)
             .and_then(|h| h.to_str().ok())
@@ -89,7 +103,6 @@ pub async fn auth(
         // 4. Masukkan claims ke request extensions sehingga handler dapat mengaksesnya
         request.extensions_mut().insert(Arc::new(token_data));
 
-        // 5. Lanjutkan ke handler berikutnya
-        Ok(next.run(request).await)
-    }
+    // 5. Lanjutkan ke handler berikutnya
+    Ok(next.run(request).await)
 }
