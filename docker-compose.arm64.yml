@@ -1,0 +1,17 @@
+services:
+  api:
+    image: merchantportal-api-arm64
+    container_name: merchantportal-api
+    build:
+      context: .
+      dockerfile: Dockerfile.arm64
+    ports:
+      - "3000:3000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - RUST_LOG=${RUST_LOG:-info}
+      - MODE=${MODE:-prod}
+      - RUST_BACKTRACE=${RUST_BACKTRACE:-0}
+    restart: unless-stopped

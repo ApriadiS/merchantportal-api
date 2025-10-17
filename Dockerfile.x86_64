@@ -1,0 +1,33 @@
+# --- Tahap 1: Builder (x86_64) ---
+FROM rust:1.85.1-alpine AS builder
+
+RUN apk add --no-cache musl-dev openssl-dev pkgconf build-base perl make
+
+WORKDIR /usr/src/app
+
+# Cache dependencies
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release --target=x86_64-unknown-linux-musl
+
+# Build actual app
+COPY src ./src
+RUN touch src/main.rs
+RUN cargo build --release --target=x86_64-unknown-linux-musl
+
+# --- Tahap 2: Runner ---
+FROM alpine:latest
+
+RUN apk add --no-cache libcrypto3 libssl3 ca-certificates tzdata
+# Fix IPv4 priority for Docker/WSL
+RUN echo "precedence ::ffff:0:0/96 100" >> /etc/gai.conf
+
+WORKDIR /app
+
+COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-musl/release/merchantportal-api .
+
+RUN chmod +x ./merchantportal-api
+
+EXPOSE 3000
+
+CMD ["./merchantportal-api"]
