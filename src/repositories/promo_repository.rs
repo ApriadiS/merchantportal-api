@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::error::{AppError, PromoError};
 use crate::model::promo_model::*;
 use crate::repositories::cache_repository::CacheRepository;
 use crate::supabase::SupabaseClient;
@@ -6,6 +6,7 @@ use crate::supabase::error::SupabaseError;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct PromoRepository {
@@ -34,12 +35,8 @@ impl PromoRepository {
             }
         }
 
-        // --- LANGKAH 2: Jika Tidak Ada, Hubungi Supabase (Cache Miss) ---
         info!("Cache Kosong (Cache Miss). Menghubungi Supabase...");
 
-        // (Di sini seharusnya kode panggilan Supabase Anda)
-        // let promos_from_db = self.db_client.from("promos")...
-        // Untuk demo, kita buat data palsu seolah-olah dari Supabase:
         let promos_from_db = self
             .supabase_client
             .from::<Value>("promo")
@@ -47,17 +44,15 @@ impl PromoRepository {
             .await
             .map_err(|e: SupabaseError| {
                 if e.is_not_found() {
-                    AppError::NotFound("Tidak ada promo yang ditemukan.".to_string())
+                    AppError::from(PromoError::NotFound("No promos found".to_string()))
                 } else {
-                    AppError::Internal(format!("Supabase error: {}", e))
+                    AppError::from(PromoError::DatabaseError(format!("Supabase error: {}", e)))
                 }
             })?;
 
         if promos_from_db.is_empty() {
             warn!("Tidak ada promo yang ditemukan di Supabase.");
-            return Err(AppError::NotFound(
-                "Tidak ada promo yang ditemukan.".to_string(),
-            ));
+            return Err(AppError::from(PromoError::NotFound("No promos found".to_string())));
         }
 
         info!(
@@ -65,71 +60,54 @@ impl PromoRepository {
             promos_from_db.len()
         );
 
-        // Konversi Vec<Value> ke Vec<Promo>
         let promos_from_db: Vec<Promo> = promos_from_db
             .into_iter()
-            .filter_map(|item| serde_json::from_value(item).ok())
+            .filter_map(|item| {
+                match serde_json::from_value::<Promo>(item.clone()) {
+                    Ok(promo) => Some(promo),
+                    Err(e) => {
+                        warn!("Failed to deserialize promo: {}. Data: {:?}", e, item);
+                        None
+                    }
+                }
+            })
             .collect();
 
-        {
-            // --- LANGKAH 3: Simpan ke Cache ---
-            self.cache_repository.clear_promo_cache_all().await;
-            self.cache_repository
-                .save_promo_cache_all(promos_from_db.clone())
-                .await;
+        info!("Berhasil deserialize {} promo.", promos_from_db.len());
+
+        if promos_from_db.is_empty() {
+            warn!("Semua promo gagal di-deserialize!");
+            return Err(AppError::Internal("Failed to deserialize promos".to_string()));
         }
 
-        // --- LANGKAH 4: Kembalikan Hasil ---
-        // 'cache_gembok' (gembok) akan otomatis terlepas di akhir fungsi ini
+        self.cache_repository.clear_promo_cache_all().await;
+        self.cache_repository
+            .save_promo_cache_all(promos_from_db.clone())
+            .await;
+
         Ok(promos_from_db)
     }
-    pub async fn rep_get_by_voucher(&self, voucher: &str) -> Result<Promo, AppError> {
-        info!("Mencari promo dengan voucher_code: {}", voucher);
-        {
-            if let Some(cached_promo) = self
-                .cache_repository
-                .get_promo_cache_by_voucher(voucher)
-                .await
-            {
-                info!("Cache Promo Ditemukan (Cache Hit)! Mengembalikan dari memori.");
-                return Ok(cached_promo);
-            }
-        }
 
-        info!("Cache Promo Tidak Ditemukan (Cache Miss). Menghubungi Supabase...");
+    pub async fn rep_get_by_id(&self, id_promo: Uuid) -> Result<Promo, AppError> {
+        info!("Mencari promo dengan id_promo: {}", id_promo);
 
         let promos_from_db = self
             .supabase_client
             .from::<Value>("promo")
-            .eq("voucher_code", voucher)
+            .eq("id_promo", &id_promo.to_string())
             .execute()
             .await
             .map_err(|e: SupabaseError| {
                 if e.is_not_found() {
-                    AppError::NotFound(format!(
-                        "Promo dengan voucher_code '{}' tidak ditemukan.",
-                        voucher
-                    ))
+                    AppError::from(PromoError::NotFound(format!("Promo with id '{}' not found", id_promo)))
                 } else {
-                    AppError::Internal(format!("Supabase error: {}", e))
+                    AppError::from(PromoError::DatabaseError(format!("Supabase error: {}", e)))
                 }
             })?;
 
         if promos_from_db.is_empty() {
-            warn!(
-                "Promo dengan voucher_code '{}' tidak ditemukan di Supabase.",
-                voucher
-            );
-            return Err(AppError::NotFound(format!(
-                "Promo dengan voucher_code '{}' tidak ditemukan.",
-                voucher
-            )));
+            return Err(AppError::from(PromoError::NotFound(format!("Promo with id '{}' not found", id_promo))));
         }
-
-        info!(
-            "Berhasil mendapatkan promo dengan voucher_code '{}' dari Supabase.",
-            voucher
-        );
 
         let promo: Promo = serde_json::from_value(promos_from_db[0].clone())
             .map_err(|e| AppError::Internal(format!("Deserialization error: {}", e)))?;
@@ -137,110 +115,62 @@ impl PromoRepository {
         Ok(promo)
     }
 
-    pub async fn rep_insert(&self, payload: &serde_json::Value) -> Result<Promo, AppError> {
-        // Use supabase client insert helper
-        let inserted: Promo = self
+    pub async fn rep_insert(&self, payload: CreatePromoPayload) -> Result<Promo, AppError> {
+        let inserted_value = self
             .supabase_client
-            .from::<Promo>("promo")
-            .insert(payload)
+            .from::<Value>("promo")
+            .insert(&payload)
             .await
-            .map_err(|e| AppError::Internal(format!("Supabase insert error: {}", e)))?;
+            .map_err(|e| PromoError::DatabaseError(format!("Supabase insert error: {}", e)))?;
 
-        // Clear cache to force refresh
+        let promo: Promo = serde_json::from_value(inserted_value)
+            .map_err(|e| AppError::Internal(format!("Deserialization error: {}", e)))?;
+
         self.cache_repository.clear_promo_cache_all().await;
-        Ok(inserted)
+        Ok(promo)
     }
 
-    pub async fn rep_update_by_voucher(
+    pub async fn rep_update_by_id(
         &self,
-        voucher: &str,
-        payload: &serde_json::Value,
+        id_promo: Uuid,
+        payload: UpdatePromoPayload,
     ) -> Result<Promo, AppError> {
-        // Ambil id dari cache berdasarkan voucher jika ada
-        if let Some(cached_promo) = self
-            .cache_repository
-            .get_promo_cache_by_voucher(voucher)
-            .await
-        {
-            info!(
-                "Cache Promo Ditemukan (Cache Hit)! Menggunakan cached id: {}",
-                cached_promo.id
-            );
-        } else {
-            info!(
-                "Cache Promo Tidak Ditemukan (Cache Miss). Menghubungi Supabase untuk mendapatkan id..."
-            );
-            // Jika tidak ada di cache, ambil dari Supabase
-            let promo = match self.rep_get_by_voucher(voucher).await {
-                Ok(p) => p,
-                Err(e) => {
-                    return Err(AppError::NotFound(format!(
-                        "Promo dengan voucher_code '{}' tidak ditemukan untuk update. Error: {}",
-                        voucher, e
-                    )));
-                }
-            };
-            info!("Ditemukan promo di Supabase dengan id: {}", promo.id);
-        }
-
-        // Update berdasarkan id yang didapat
-        let id = if let Some(cached_promo) = self
-            .cache_repository
-            .get_promo_cache_by_voucher(voucher)
-            .await
-        {
-            cached_promo.id
-        } else {
-            let promo = self.rep_get_by_voucher(voucher).await?;
-            promo.id
-        };
-
         let updated_vec = self
             .supabase_client
-            .from::<Promo>("promo")
-            .eq("id", id.to_string().as_str())
-            .update(payload)
+            .from::<Value>("promo")
+            .eq("id_promo", &id_promo.to_string())
+            .update(&payload)
             .await
-            .map_err(|e| AppError::Internal(format!("Supabase update error: {}", e)))?;
+            .map_err(|e| PromoError::DatabaseError(format!("Supabase update error: {}", e)))?;
 
-        // Clear cache
         self.cache_repository.clear_promo_cache_all().await;
 
-        updated_vec
+        let promo_value = updated_vec
             .into_iter()
             .next()
-            .ok_or_else(|| AppError::Internal("Failed to update promo".to_string()))
+            .ok_or_else(|| AppError::Internal("Failed to update promo".to_string()))?;
+
+        serde_json::from_value(promo_value)
+            .map_err(|e| AppError::Internal(format!("Deserialization error: {}", e)))
     }
 
-    pub async fn rep_delete_by_voucher(&self, voucher: &str) -> Result<(), AppError> {
-        // Get ID from cache or DB
-        let id = if let Some(cached_promo) = self
-            .cache_repository
-            .get_promo_cache_by_voucher(voucher)
-            .await
-        {
-            cached_promo.id
-        } else {
-            let promo = self.rep_get_by_voucher(voucher).await?;
-            promo.id
-        };
-
+    pub async fn rep_delete_by_id(&self, id_promo: Uuid) -> Result<(), AppError> {
         let _deleted = self
             .supabase_client
-            .from::<Promo>("promo")
-            .eq("id", id.to_string().as_str())
+            .from::<Value>("promo")
+            .eq("id_promo", &id_promo.to_string())
             .delete()
             .await
-            .map_err(|e| AppError::Internal(format!("Supabase delete error: {}", e)))?;
+            .map_err(|e| PromoError::DatabaseError(format!("Supabase delete error: {}", e)))?;
 
         self.cache_repository.clear_promo_cache_all().await;
         Ok(())
     }
 
-    pub async fn rep_get_by_store_id(&self, store_id: i64) -> Result<Vec<Promo>, AppError> {
+    pub async fn rep_get_by_store_id(&self, store_id: Uuid) -> Result<Vec<Promo>, AppError> {
         let cache = self.cache_repository.get_promo_store_cache_all();
         let cache_data = cache.read().await;
-        let promo_ids: Vec<i64> = cache_data.iter().filter(|ps| ps.store_id == store_id).map(|ps| ps.promo_id).collect();
+        let promo_ids: Vec<Uuid> = cache_data.iter().filter(|ps| ps.store_id == store_id).map(|ps| ps.promo_id).collect();
         drop(cache_data);
 
         if promo_ids.is_empty() {
@@ -249,7 +179,7 @@ impl PromoRepository {
 
         let promo_cache = self.cache_repository.get_promo_cache_all();
         let promo_data = promo_cache.read().await;
-        let promos: Vec<Promo> = promo_data.iter().filter(|p| promo_ids.contains(&p.id)).cloned().collect();
+        let promos: Vec<Promo> = promo_data.iter().filter(|p| promo_ids.contains(&p.id_promo)).cloned().collect();
         Ok(promos)
     }
 }

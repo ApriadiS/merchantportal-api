@@ -1,14 +1,12 @@
-use crate::error::AppError;
+use crate::error::{AppError, StoreError};
 use crate::model::store_model::*;
-use crate::model::store_model::{
-    CreateStorePayload, Store, UpdateStorePayload, UpdateStorePayloadWithID,
-};
 use crate::repositories::cache_repository::CacheRepository;
 use crate::supabase::SupabaseClient;
 use crate::supabase::error::SupabaseError;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct StoreRepository {
@@ -46,17 +44,15 @@ impl StoreRepository {
             .await
             .map_err(|e: SupabaseError| {
                 if e.is_not_found() {
-                    AppError::NotFound("Tidak ada store yang ditemukan.".to_string())
+                    AppError::from(StoreError::NotFound("No stores found".to_string()))
                 } else {
-                    AppError::Internal(format!("Supabase error: {}", e))
+                    AppError::from(StoreError::DatabaseError(format!("Supabase error: {}", e)))
                 }
             })?;
 
         if stores_from_db.is_empty() {
             warn!("Tidak ada store yang ditemukan di Supabase.");
-            return Err(AppError::NotFound(
-                "Tidak ada store yang ditemukan.".to_string(),
-            ));
+            return Err(AppError::from(StoreError::NotFound("No stores found".to_string())));
         }
 
         info!(
@@ -99,24 +95,15 @@ impl StoreRepository {
             .await
             .map_err(|e: SupabaseError| {
                 if e.is_not_found() {
-                    AppError::NotFound(format!(
-                        "Tidak ada store yang ditemukan untuk route: {}.",
-                        route
-                    ))
+                    AppError::from(StoreError::NotFound(format!("Store with route '{}' not found", route)))
                 } else {
-                    AppError::Internal(format!("Supabase error: {}", e))
+                    AppError::from(StoreError::DatabaseError(format!("Supabase error: {}", e)))
                 }
             })?;
 
         if stores_from_db.is_empty() {
-            warn!(
-                "Tidak ada store yang ditemukan di Supabase untuk route: {}",
-                route
-            );
-            return Err(AppError::NotFound(format!(
-                "Tidak ada store yang ditemukan untuk route: {}.",
-                route
-            )));
+            warn!("Tidak ada store yang ditemukan di Supabase untuk route: {}", route);
+            return Err(AppError::from(StoreError::NotFound(format!("Store with route '{}' not found", route))));
         }
 
         info!(
@@ -138,7 +125,7 @@ impl StoreRepository {
             .insert(&new_store)
             .await
             .map_err(|e: SupabaseError| {
-                AppError::Internal(format!("Supabase error during create: {}", e))
+                StoreError::DatabaseError(format!("Supabase error during create: {}", e))
             })?;
 
         if created_store.is_null() {
@@ -162,39 +149,27 @@ impl StoreRepository {
         route: &str,
         updated_store: UpdateStorePayload,
     ) -> Result<Store, AppError> {
-        // Ambil id dari cache jika ada
+        // Get id from cache or database
         let id = {
-            let cache = self.cache_repository.get_store_cache_by_route(route).await;
-            if let Some(cached_store) = cache {
+            if let Some(cached_store) = self.cache_repository.get_store_cache_by_route(route).await {
                 cached_store.id
             } else {
-                // Jika tidak ada di cache, ambil dari database
                 let store = self.rep_fetch_by_route(route).await?;
                 store.id
             }
         };
 
-        // menambahkan id kedalam updated_store
-        let payload_update: UpdateStorePayloadWithID = UpdateStorePayloadWithID {
-            id: id as u64,
-            name: updated_store.name.clone(),
-            company: updated_store.company.clone(),
-            address: updated_store.address.clone(),
-            route: updated_store.route.clone(),
-            store_type: updated_store.store_type.clone(),
-        };
-
         let updated = self
             .supabase_client
             .from::<Value>("store")
-            .eq("id", payload_update.id.to_string().as_str())
-            .update(&payload_update)
+            .eq("id", &id.to_string())
+            .update(&updated_store)
             .await
             .map_err(|e: SupabaseError| {
                 if e.is_not_found() {
-                    AppError::NotFound(format!("Store dengan route '{}' tidak ditemukan.", route))
+                    AppError::from(StoreError::NotFound(format!("Store with route '{}' not found", route)))
                 } else {
-                    AppError::Internal(format!("Supabase error during update: {}", e))
+                    AppError::from(StoreError::DatabaseError(format!("Supabase error during update: {}", e)))
                 }
             })?;
 
@@ -214,15 +189,13 @@ impl StoreRepository {
         Ok(store)
     }
 
-    pub async fn rep_delete(&self, id: &str) -> Result<(), AppError> {
-        // Ambil id dari cache jika ada
+    pub async fn rep_delete(&self, route: &str) -> Result<(), AppError> {
+        // Get id from cache or database
         let id = {
-            let cache = self.cache_repository.get_store_cache_by_route(id).await;
-            if let Some(cached_store) = cache {
+            if let Some(cached_store) = self.cache_repository.get_store_cache_by_route(route).await {
                 cached_store.id
             } else {
-                // Jika tidak ada di cache, ambil dari database
-                let store = self.rep_fetch_by_route(id).await?;
+                let store = self.rep_fetch_by_route(route).await?;
                 store.id
             }
         };
@@ -230,14 +203,14 @@ impl StoreRepository {
         let deleted = self
             .supabase_client
             .from::<Value>("store")
-            .eq("id", id.to_string().as_str())
+            .eq("id", &id.to_string())
             .delete()
             .await
             .map_err(|e: SupabaseError| {
                 if e.is_not_found() {
-                    AppError::NotFound(format!("Store dengan id '{}' tidak ditemukan.", id))
+                    AppError::from(StoreError::NotFound(format!("Store with route '{}' not found", route)))
                 } else {
-                    AppError::Internal(format!("Supabase error during delete: {}", e))
+                    AppError::from(StoreError::DatabaseError(format!("Supabase error during delete: {}", e)))
                 }
             })?;
 

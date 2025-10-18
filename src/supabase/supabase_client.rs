@@ -142,18 +142,23 @@ impl SupabaseClient {
         self.handle_response_json("POST", path, response).await
     }
 
-    async fn put(&self, path: &str, payload: &Value) -> SupabaseResult<Value> {
+    async fn patch(&self, path: &str, payload: &Value) -> SupabaseResult<Value> {
         let url = self.build_url(path);
-        debug!("PUT request to: {}", url);
+        debug!("PATCH request to: {}", url);
 
         let response = self
-            .build_request(reqwest::Method::PUT, &url)
+            .client
+            .request(reqwest::Method::PATCH, &url)
+            .header("apikey", &self.api_key)
+            .header("Authorization", format!("Bearer {}", &self.api_key))
+            .header("Content-Type", "application/json")
+            .header("Prefer", "return=representation")
             .json(payload)
             .send()
             .await
             .map_err(|e| SupabaseError::NetworkError { source: e })?;
 
-        self.handle_response_json("PUT", path, response).await
+        self.handle_response_json("PATCH", path, response).await
     }
 
     async fn delete(&self, path: &str) -> SupabaseResult<Value> {
@@ -525,7 +530,7 @@ impl<'a, T: DeserializeOwned> QueryBuilder<'a, T> {
             format!("{}?{}", self.table, self.filters.join("&"))
         };
 
-        let response = self.client.put(&path, &json).await?;
+        let response = self.client.patch(&path, &json).await?;
 
         // Parse response sebagai Vec<T>
         let results: Vec<T> =

@@ -3,9 +3,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
+use uuid::Uuid;
 
 use crate::model::promo_model::Promo;
 use crate::model::promo_store_model::PromoStore;
+use crate::model::promo_tenor_model::PromoTenor;
 use crate::model::store_model::Store;
 
 #[derive(Clone)]
@@ -42,8 +44,8 @@ pub struct CacheRepository {
     promo_cache_all: Arc<RwLock<Vec<Promo>>>,
     store_cache_all: Arc<RwLock<Vec<Store>>>,
     promo_store_cache_all: Arc<RwLock<Vec<PromoStore>>>,
+    promo_tenor_cache_all: Arc<RwLock<Vec<PromoTenor>>>,
 
-    promo_cache_by_voucher: Arc<RwLock<HashMap<String, Promo>>>,
     store_cache_by_route: Arc<RwLock<HashMap<String, Store>>>,
     promo_store_cache_by_key: Arc<RwLock<HashMap<String, PromoStore>>>,
 
@@ -55,8 +57,8 @@ impl CacheRepository {
             promo_cache_all: Arc::new(RwLock::new(Vec::new())),
             store_cache_all: Arc::new(RwLock::new(Vec::new())),
             promo_store_cache_all: Arc::new(RwLock::new(Vec::new())),
+            promo_tenor_cache_all: Arc::new(RwLock::new(Vec::new())),
 
-            promo_cache_by_voucher: Arc::new(RwLock::new(HashMap::new())),
             store_cache_by_route: Arc::new(RwLock::new(HashMap::new())),
             promo_store_cache_by_key: Arc::new(RwLock::new(HashMap::new())),
 
@@ -131,11 +133,12 @@ impl CacheRepository {
         Arc::clone(&self.promo_store_cache_all)
     }
 
-    pub async fn get_promo_cache_by_voucher(&self, voucher: &str) -> Option<Promo> {
-        let cache = self.promo_cache_by_voucher.read().await;
-        info!("Mendapatkan cache promo (by voucher)...");
-        cache.get(voucher).cloned()
+    pub fn get_promo_tenor_cache_all(&self) -> Arc<RwLock<Vec<PromoTenor>>> {
+        info!("Mendapatkan cache promo_tenor (all)...");
+        Arc::clone(&self.promo_tenor_cache_all)
     }
+
+
 
     pub async fn get_store_cache_by_route(&self, route: &str) -> Option<Store> {
         let cache = self.store_cache_by_route.read().await;
@@ -143,7 +146,7 @@ impl CacheRepository {
         cache.get(route).cloned()
     }
 
-    pub async fn get_promo_store_cache_by_key(&self, promo_id: i64, store_id: i64) -> Option<PromoStore> {
+    pub async fn get_promo_store_cache_by_key(&self, promo_id: Uuid, store_id: Uuid) -> Option<PromoStore> {
         let cache = self.promo_store_cache_by_key.read().await;
         info!("Mendapatkan cache promo_store (by key)...");
         let key = format!("{}-{}", promo_id, store_id);
@@ -151,22 +154,15 @@ impl CacheRepository {
     }
 
     pub async fn save_promo_cache_all(&self, promos: Vec<Promo>) {
+        info!("Menyimpan cache promo (all)...");
         let mut cache = self.promo_cache_all.write().await;
         *cache = promos;
+    }
 
-        info!("Menyimpan cache promo (all)...");
-
-        // Membagi data
-        let mut cache_by_voucher = self.promo_cache_by_voucher.write().await;
-        info!("Memperbarui cache promo (by voucher)...");
-        cache_by_voucher.clear();
-        for promo in cache.iter() {
-            cache_by_voucher.insert(promo.voucher_code.clone(), promo.clone());
-        }
-        info!(
-            "Cache promo (by voucher) diperbarui dengan {} entri.",
-            cache_by_voucher.len()
-        );
+    pub async fn save_promo_tenor_cache_all(&self, promo_tenors: Vec<PromoTenor>) {
+        info!("Menyimpan cache promo_tenor (all)...");
+        let mut cache = self.promo_tenor_cache_all.write().await;
+        *cache = promo_tenors;
     }
 
     pub async fn save_store_cache_all(&self, stores: Vec<Store>) {
@@ -222,5 +218,11 @@ impl CacheRepository {
         let mut cache = self.promo_store_cache_all.write().await;
         cache.clear();
         info!("Menghapus cache promo_store (all)...");
+    }
+
+    pub async fn clear_promo_tenor_cache_all(&self) {
+        let mut cache = self.promo_tenor_cache_all.write().await;
+        cache.clear();
+        info!("Menghapus cache promo_tenor (all)...");
     }
 }

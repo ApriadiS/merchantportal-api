@@ -1,11 +1,12 @@
-use crate::error::AppError;
-use crate::model::promo_store_model::PromoStore;
+use crate::error::{AppError, PromoStoreError};
+use crate::model::promo_store_model::*;
 use crate::repositories::cache_repository::CacheRepository;
 use crate::supabase::SupabaseClient;
 use crate::supabase::error::SupabaseError;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct PromoStoreRepository {
@@ -43,17 +44,15 @@ impl PromoStoreRepository {
             .await
             .map_err(|e: SupabaseError| {
                 if e.is_not_found() {
-                    AppError::NotFound("Tidak ada promo_store yang ditemukan.".to_string())
+                    AppError::from(PromoStoreError::NotFound("No promo store relations found".to_string()))
                 } else {
-                    AppError::Internal(format!("Supabase error: {}", e))
+                    AppError::from(PromoStoreError::DatabaseError(format!("Supabase error: {}", e)))
                 }
             })?;
 
         if promo_stores_from_db.is_empty() {
             warn!("Tidak ada promo_store yang ditemukan di Supabase.");
-            return Err(AppError::NotFound(
-                "Tidak ada promo_store yang ditemukan.".to_string(),
-            ));
+            return Err(AppError::from(PromoStoreError::NotFound("No promo store relations found".to_string())));
         }
 
         info!(
@@ -75,7 +74,7 @@ impl PromoStoreRepository {
 
         Ok(promo_stores)
     }
-    pub async fn rep_fetch_by_key(&self, promo_id: i64, store_id: i64) -> Result<PromoStore, AppError> {
+    pub async fn rep_fetch_by_key(&self, promo_id: Uuid, store_id: Uuid) -> Result<PromoStore, AppError> {
         if let Some(cached) = self.cache_repository.get_promo_store_cache_by_key(promo_id, store_id).await {
             info!("Cache PromoStore Ditemukan (Cache Hit)! Mengembalikan dari memori.");
             return Ok(cached);
@@ -92,24 +91,21 @@ impl PromoStoreRepository {
             .await
             .map_err(|e: SupabaseError| {
                 if e.is_not_found() {
-                    AppError::NotFound(format!(
-                        "Tidak ada promo_store yang ditemukan untuk promo_id {} dan store_id {}.",
+                    AppError::from(PromoStoreError::NotFound(format!(
+                        "PromoStore with promo_id '{}' and store_id '{}' not found",
                         promo_id, store_id
-                    ))
+                    )))
                 } else {
-                    AppError::Internal(format!("Supabase error: {}", e))
+                    AppError::from(PromoStoreError::DatabaseError(format!("Supabase error: {}", e)))
                 }
             })?;
 
         if promos_from_db.is_empty() {
-            warn!(
-                "Tidak ada promo_store yang ditemukan di Supabase untuk promo_id {} dan store_id {}.",
+            warn!("Tidak ada promo_store yang ditemukan di Supabase untuk promo_id {} dan store_id {}.", promo_id, store_id);
+            return Err(AppError::from(PromoStoreError::NotFound(format!(
+                "PromoStore with promo_id '{}' and store_id '{}' not found",
                 promo_id, store_id
-            );
-            return Err(AppError::NotFound(format!(
-                "Tidak ada promo_store yang ditemukan untuk promo_id {} dan store_id {}.",
-                promo_id, store_id
-            )));
+            ))));
         }
 
         info!(
@@ -123,63 +119,73 @@ impl PromoStoreRepository {
         Ok(promo)
     }
 
-    pub async fn rep_insert(&self, payload: &serde_json::Value) -> Result<PromoStore, AppError> {
-        let inserted: PromoStore = self
+    pub async fn rep_insert(&self, payload: CreatePromoStorePayload) -> Result<PromoStore, AppError> {
+        let inserted_value = self
             .supabase_client
-            .from::<PromoStore>("promo_store")
-            .insert(payload)
+            .from::<Value>("promo_store")
+            .insert(&payload)
             .await
-            .map_err(|e| AppError::Internal(format!("Supabase insert error: {}", e)))?;
+            .map_err(|e| PromoStoreError::DatabaseError(format!("Supabase insert error: {}", e)))?;
+
+        let promo_store: PromoStore = serde_json::from_value(inserted_value)
+            .map_err(|e| AppError::Internal(format!("Deserialization error: {}", e)))?;
 
         self.cache_repository.clear_promo_store_cache_all().await;
-        Ok(inserted)
+        Ok(promo_store)
     }
 
     pub async fn rep_update_by_key(
         &self,
-        promo_id: i64,
-        store_id: i64,
-        payload: &serde_json::Value,
+        promo_id: Uuid,
+        store_id: Uuid,
+        payload: UpdatePromoStorePayload,
     ) -> Result<PromoStore, AppError> {
+        // Get promo_store to find id
+        let promo_store = self.rep_fetch_by_key(promo_id, store_id).await?;
+
         let updated_vec = self
             .supabase_client
-            .from::<PromoStore>("promo_store")
-            .eq("promo_id", &promo_id.to_string())
-            .eq("store_id", &store_id.to_string())
-            .update(payload)
+            .from::<Value>("promo_store")
+            .eq("id", &promo_store.id.to_string())
+            .update(&payload)
             .await
-            .map_err(|e| AppError::Internal(format!("Supabase update error: {}", e)))?;
+            .map_err(|e| PromoStoreError::DatabaseError(format!("Supabase update error: {}", e)))?;
 
         self.cache_repository.clear_promo_store_cache_all().await;
 
-        updated_vec
+        let promo_store_value = updated_vec
             .into_iter()
             .next()
-            .ok_or_else(|| AppError::Internal("Failed to update promo_store".to_string()))
+            .ok_or_else(|| AppError::Internal("Failed to update promo_store".to_string()))?;
+
+        serde_json::from_value(promo_store_value)
+            .map_err(|e| AppError::Internal(format!("Deserialization error: {}", e)))
     }
 
-    pub async fn rep_delete_by_key(&self, promo_id: i64, store_id: i64) -> Result<(), AppError> {
+    pub async fn rep_delete_by_key(&self, promo_id: Uuid, store_id: Uuid) -> Result<(), AppError> {
+        // Get promo_store to find id
+        let promo_store = self.rep_fetch_by_key(promo_id, store_id).await?;
+
         let _deleted = self
             .supabase_client
-            .from::<PromoStore>("promo_store")
-            .eq("promo_id", &promo_id.to_string())
-            .eq("store_id", &store_id.to_string())
+            .from::<Value>("promo_store")
+            .eq("id", &promo_store.id.to_string())
             .delete()
             .await
-            .map_err(|e| AppError::Internal(format!("Supabase delete error: {}", e)))?;
+            .map_err(|e| PromoStoreError::DatabaseError(format!("Supabase delete error: {}", e)))?;
 
         self.cache_repository.clear_promo_store_cache_all().await;
         Ok(())
     }
 
-    pub async fn rep_fetch_by_promo_id(&self, promo_id: i64) -> Result<Vec<PromoStore>, AppError> {
+    pub async fn rep_fetch_by_promo_id(&self, promo_id: Uuid) -> Result<Vec<PromoStore>, AppError> {
         let cache = self.cache_repository.get_promo_store_cache_all();
         let cache_data = cache.read().await;
         let filtered: Vec<PromoStore> = cache_data.iter().filter(|ps| ps.promo_id == promo_id).cloned().collect();
         Ok(filtered)
     }
 
-    pub async fn rep_fetch_by_store_id(&self, store_id: i64) -> Result<Vec<PromoStore>, AppError> {
+    pub async fn rep_fetch_by_store_id(&self, store_id: Uuid) -> Result<Vec<PromoStore>, AppError> {
         let cache = self.cache_repository.get_promo_store_cache_all();
         let cache_data = cache.read().await;
         let filtered: Vec<PromoStore> = cache_data.iter().filter(|ps| ps.store_id == store_id).cloned().collect();

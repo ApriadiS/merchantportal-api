@@ -1,5 +1,5 @@
 use crate::app_state::AppState;
-use crate::error::AppError;
+use crate::error::{AppError, PromoStoreError};
 use crate::model::promo_store_model::PromoStore;
 use crate::model::promo_store_model::{CreatePromoStorePayload, UpdatePromoStorePayload};
 use axum::{
@@ -8,11 +8,12 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct PromoStoreQuery {
-    pub promo_id: Option<i64>,
-    pub store_id: Option<i64>,
+    pub promo_id: Option<Uuid>,
+    pub store_id: Option<Uuid>,
 }
 
 pub async fn han_get_promo_stores(
@@ -31,39 +32,37 @@ pub async fn han_get_promo_stores(
 
     let promo_stores = state.promo_store_service.ser_get_all_promo_stores().await?;
     if promo_stores.is_empty() {
-        return Err(AppError::NotFound("No promo stores found".to_string()));
+        return Err(PromoStoreError::NotFound("No promo store relations found".to_string()).into());
     }
-
     Ok(Json(promo_stores))
 }
 
 #[derive(Deserialize)]
 pub struct PromoStoreKey {
-    promo_id: i64,
-    store_id: i64,
+    promo_id: Uuid,
+    store_id: Uuid,
 }
 
 pub async fn han_get_promo_store_by_key(
     State(state): State<Arc<AppState>>,
     Path(key): Path<String>,
 ) -> Result<Json<PromoStore>, AppError> {
-    let parts: Vec<&str> = key.split('-').collect();
-    if parts.len() != 2 {
-        return Err(AppError::BadRequest("Invalid key format. Use: promo_id-store_id".to_string()));
+    if key.len() != 73 {
+        return Err(PromoStoreError::InvalidKey("Invalid key format. Expected: {uuid}-{uuid}".to_string()).into());
     }
 
-    let promo_id = parts[0].parse::<i64>()
-        .map_err(|_| AppError::BadRequest("Invalid promo_id".to_string()))?;
-    let store_id = parts[1].parse::<i64>()
-        .map_err(|_| AppError::BadRequest("Invalid store_id".to_string()))?;
+    let promo_id = Uuid::parse_str(&key[0..36])
+        .map_err(|_| PromoStoreError::InvalidKey("Invalid promo_id format".to_string()))?;
+    let store_id = Uuid::parse_str(&key[37..73])
+        .map_err(|_| PromoStoreError::InvalidKey("Invalid store_id format".to_string()))?;
 
     let promo_store = state
         .promo_store_service
         .ser_get_promo_store_by_key(promo_id, store_id)
         .await?
         .ok_or_else(|| {
-            AppError::NotFound(format!(
-                "PromoStore dengan promo_id '{}' dan store_id '{}' tidak ditemukan",
+            PromoStoreError::NotFound(format!(
+                "PromoStore with promo_id '{}' and store_id '{}' not found",
                 promo_id, store_id
             ))
         })?;
@@ -89,21 +88,20 @@ pub async fn han_update_promo_store(
     Path(key): Path<String>,
     Json(payload): Json<UpdatePromoStorePayload>,
 ) -> Result<Json<PromoStore>, AppError> {
-    let parts: Vec<&str> = key.split('-').collect();
-    if parts.len() != 2 {
-        return Err(AppError::BadRequest("Invalid key format. Use: promo_id-store_id".to_string()));
+    if key.len() != 73 {
+        return Err(PromoStoreError::InvalidKey("Invalid key format. Expected: {uuid}-{uuid}".to_string()).into());
     }
 
-    let promo_id = parts[0].parse::<i64>()
-        .map_err(|_| AppError::BadRequest("Invalid promo_id".to_string()))?;
-    let store_id = parts[1].parse::<i64>()
-        .map_err(|_| AppError::BadRequest("Invalid store_id".to_string()))?;
+    let promo_id = Uuid::parse_str(&key[0..36])
+        .map_err(|_| PromoStoreError::InvalidKey("Invalid promo_id format".to_string()))?;
+    let store_id = Uuid::parse_str(&key[37..73])
+        .map_err(|_| PromoStoreError::InvalidKey("Invalid store_id format".to_string()))?;
 
     if let Err(_) = han_get_promo_store_by_key(State(state.clone()), Path(key.clone())).await {
-        return Err(AppError::NotFound(format!(
+        return Err(PromoStoreError::NotFound(format!(
             "PromoStore with promo_id '{}' and store_id '{}' not found",
             promo_id, store_id
-        )));
+        )).into());
     }
 
     let updated = state
@@ -117,21 +115,20 @@ pub async fn han_delete_promo_store(
     State(state): State<Arc<AppState>>,
     Path(key): Path<String>,
 ) -> Result<Json<()>, AppError> {
-    let parts: Vec<&str> = key.split('-').collect();
-    if parts.len() != 2 {
-        return Err(AppError::BadRequest("Invalid key format. Use: promo_id-store_id".to_string()));
+    if key.len() != 73 {
+        return Err(PromoStoreError::InvalidKey("Invalid key format. Expected: {uuid}-{uuid}".to_string()).into());
     }
 
-    let promo_id = parts[0].parse::<i64>()
-        .map_err(|_| AppError::BadRequest("Invalid promo_id".to_string()))?;
-    let store_id = parts[1].parse::<i64>()
-        .map_err(|_| AppError::BadRequest("Invalid store_id".to_string()))?;
+    let promo_id = Uuid::parse_str(&key[0..36])
+        .map_err(|_| PromoStoreError::InvalidKey("Invalid promo_id format".to_string()))?;
+    let store_id = Uuid::parse_str(&key[37..73])
+        .map_err(|_| PromoStoreError::InvalidKey("Invalid store_id format".to_string()))?;
 
     if let Err(_) = han_get_promo_store_by_key(State(state.clone()), Path(key)).await {
-        return Err(AppError::NotFound(format!(
+        return Err(PromoStoreError::NotFound(format!(
             "PromoStore with promo_id '{}' and store_id '{}' not found",
             promo_id, store_id
-        )));
+        )).into());
     }
 
     state

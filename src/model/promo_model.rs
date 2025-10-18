@@ -1,73 +1,65 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum PromoValueType {
+pub enum AdminPromoType {
+    FIX,
+    PERCENT,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum DiscountPromoType {
     FIX,
     PERCENT,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreatePromoPayload {
-    pub title: String,
-    pub start_date: String,
-    pub end_date: String,
-    pub is_active: bool,
-    pub voucher_code: String,
-    pub min_transaction: i64,
-    pub admin_fee_type: PromoValueType,
-    pub admin_fee: f64,
+    pub title_promo: String,
+    pub admin_promo_type: AdminPromoType,
     pub interest_rate: f64,
-    pub tenor: i64,
-    pub subsidi: f64,
-    pub free_installment: i64,
+    pub discount_type: DiscountPromoType,
+    pub is_active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub discount: Option<f64>,
+    pub start_date_promo: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub discount_type: Option<PromoValueType>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_discount: Option<f64>,
+    pub end_date_promo: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UpdatePromoPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
+    pub title_promo: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_date: Option<String>,
+    pub admin_promo_type: Option<AdminPromoType>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub end_date: Option<String>,
+    pub interest_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discount_type: Option<DiscountPromoType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_active: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub min_transaction: Option<i64>,
+    pub start_date_promo: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub discount: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub discount_type: Option<PromoValueType>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_discount: Option<f64>,
+    pub end_date_promo: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Promo {
-    pub id: i64,
-    pub title: String,
-    pub start_date: String,
-    pub end_date: String,
-    pub is_active: bool,
-    pub voucher_code: String,
-    pub min_transaction: i64,
-    pub admin_fee_type: PromoValueType,
-    pub admin_fee: f64,
+    pub id_promo: Uuid,
+    pub title_promo: String,
+    pub admin_promo_type: AdminPromoType,
     pub interest_rate: f64,
-    pub tenor: i64,
-    pub subsidi: f64,
-    pub free_installment: i64,
+    pub discount_type: DiscountPromoType,
+    pub is_active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub discount: Option<f64>,
+    pub start_date_promo: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub discount_type: Option<PromoValueType>,
+    pub end_date_promo: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_discount: Option<f64>,
+    pub created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
 }
+
+pub type PromoResponse = Promo;
