@@ -213,11 +213,19 @@ impl CacheRepository {
         let mut cache = self.store_cache_all.write().await;
         cache.clear();
         info!("Menghapus cache store (all)...");
+        
+        let mut cache_by_route = self.store_cache_by_route.write().await;
+        cache_by_route.clear();
+        info!("Menghapus cache store (by route)...");
     }
     pub async fn clear_promo_store_cache_all(&self) {
         let mut cache = self.promo_store_cache_all.write().await;
         cache.clear();
         info!("Menghapus cache promo_store (all)...");
+        
+        let mut cache_by_key = self.promo_store_cache_by_key.write().await;
+        cache_by_key.clear();
+        info!("Menghapus cache promo_store (by key)...");
     }
 
     pub async fn clear_promo_tenor_cache_all(&self) {
