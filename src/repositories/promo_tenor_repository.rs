@@ -188,11 +188,8 @@ impl PromoTenorRepository {
         for ps in promo_stores {
             let tenors: Vec<PromoTenor> = tenor_data.iter().filter(|t| t.promo_id == ps.promo_id).cloned().collect();
             
-            if let Some(ref tenor_ids) = ps.tenor_ids {
-                result.extend(tenors.into_iter().filter(|t| tenor_ids.contains(&t.id)));
-            } else {
-                result.extend(tenors);
-            }
+            // Filter by is_available instead of tenor_ids
+            result.extend(tenors.into_iter().filter(|t| t.is_available));
         }
 
         Ok(result)

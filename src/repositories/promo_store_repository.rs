@@ -131,6 +131,7 @@ impl PromoStoreRepository {
             .map_err(|e| AppError::Internal(format!("Deserialization error: {}", e)))?;
 
         self.cache_repository.clear_promo_store_cache_all().await;
+        self.cache_repository.clear_promo_tenor_cache_all().await;
         Ok(promo_store)
     }
 
@@ -152,6 +153,7 @@ impl PromoStoreRepository {
             .map_err(|e| PromoStoreError::DatabaseError(format!("Supabase update error: {}", e)))?;
 
         self.cache_repository.clear_promo_store_cache_all().await;
+        self.cache_repository.clear_promo_tenor_cache_all().await;
 
         let promo_store_value = updated_vec
             .into_iter()
@@ -175,6 +177,7 @@ impl PromoStoreRepository {
             .map_err(|e| PromoStoreError::DatabaseError(format!("Supabase delete error: {}", e)))?;
 
         self.cache_repository.clear_promo_store_cache_all().await;
+        self.cache_repository.clear_promo_tenor_cache_all().await;
         Ok(())
     }
 
