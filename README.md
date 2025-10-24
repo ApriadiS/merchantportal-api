@@ -1,4 +1,4 @@
-# 🚀 Merchant Portal API v1.2.0
+# 🚀 Merchant Portal API v1.2.2
 
 Backend Rust yang dibangun dengan Axum, dirancang untuk menangani traffic tinggi dengan resource terbatas. Membuktikan bahwa dengan 2 core CPU dan 1GB RAM, kita bisa melayani ribuan user bersamaan tanpa masalah.
 
@@ -37,7 +37,41 @@ Ringkasan hasil load testing dengan k6 pada environment lokal:
 
 ---
 
-## 🆕 What's New in v1.2.0
+## 🆕 What's New in v1.2.2
+
+### 🐛 Medium Priority Bug Fixes
+
+**1. Rate Limiter Now Applies to Protected Routes**
+- ✅ Removed skip logic for protected routes
+- ✅ Mutations (create/update/delete) now properly rate-limited
+- ✅ Only public endpoints bypass rate limiting
+
+**2. Public Endpoints Consistency**
+- ✅ Created `src/constants.rs` with shared PUBLIC_ENDPOINTS
+- ✅ Eliminates duplicated logic between middleware and rate limiter
+- ✅ Single source of truth for public endpoint definitions
+
+**3. JWT Cache Auto-Expiry**
+- ✅ Expired tokens automatically removed from cache
+- ✅ Prevents revoked tokens from working until restart
+- ✅ Better security and cache hygiene
+
+**4. Tenor Value Validation**
+- ✅ Tenor must be between 1-60 months
+- ✅ Returns proper error for invalid values
+- ✅ Prevents data corruption from invalid input
+
+**5. Cache Invalidation Strategy**
+- ✅ PromoStore mutations invalidate PromoTenor cache
+- ✅ Ensures fresh data after link/unlink operations
+- ✅ Fixed in v1.2.1, documented here
+
+### 🔄 Breaking Changes
+- None - All changes backward compatible
+
+---
+
+## 📜 Changelog v1.2.0
 
 ### 🎯 Production Hardening
 
@@ -374,8 +408,8 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ---
 
-**Version**: 1.2.0  
-**Last Updated**: 2025-01-18  
+**Version**: 1.2.2  
+**Last Updated**: 2025-01-20  
 **Status**: ✅ Production Ready
 
 *Dibangun dengan ❤️ menggunakan Rust + Axum + Tokio. Tested dengan k6.*
