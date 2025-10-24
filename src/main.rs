@@ -45,6 +45,7 @@ use services::store_service::StoreService;
 use supabase::SupabaseClient;
 
 mod app_state;
+mod constants;
 mod error;
 mod handlers;
 mod middleware;

@@ -13,6 +13,8 @@ use std::{
 };
 use tracing::{info, warn};
 
+use crate::constants::PUBLIC_ENDPOINTS;
+
 #[derive(Clone)]
 pub struct RateLimiter {
     requests: Arc<DashMap<String, Vec<Instant>>>,
@@ -70,7 +72,8 @@ impl RateLimiter {
 
         let path = req.uri().path();
         
-        if path.starts_with("/create-") || path.starts_with("/update-") || path.starts_with("/delete-") {
+        // Skip rate limiting for public endpoints only
+        if PUBLIC_ENDPOINTS.iter().any(|&endpoint| path.starts_with(endpoint)) {
             return next.run(req).await;
         }
 

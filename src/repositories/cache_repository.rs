@@ -81,8 +81,18 @@ impl CacheRepository {
         let cache = self.auth_token_cache.read().await;
         if let Some(auth) = cache.as_ref() {
             if let Some(t) = auth.token.get(token) {
+                // Check if token is expired
                 if chrono::Utc::now() < t.expiry {
                     return t.claims.clone();
+                } else {
+                    // Token expired, need to remove it
+                    drop(cache);
+                    let mut cache_mut = self.auth_token_cache.write().await;
+                    if let Some(auth_mut) = cache_mut.as_mut() {
+                        auth_mut.token.remove(token);
+                        info!("Removed expired token from cache");
+                    }
+                    return None;
                 }
             }
         }

@@ -14,7 +14,7 @@ use tracing::{error, info, Span};
 use chrono::TimeZone;
 use uuid::Uuid;
 
-use crate::{app_state::AppState, error::AppError};
+use crate::{app_state::AppState, constants::PUBLIC_ENDPOINTS, error::AppError};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -36,14 +36,10 @@ pub async fn auth(
         return Ok(next.run(request).await);
     }
 
-    let uri = request.uri();
-    let path = uri.path();
+    let path = request.uri().path();
     
-    if path == "/get-promo" && uri.query().map_or(false, |q| q.contains("store_id=")) {
-        return Ok(next.run(request).await);
-    }
-    
-    if path == "/get-store" || path.starts_with("/get-store/") {
+    // Check if path is public endpoint
+    if PUBLIC_ENDPOINTS.iter().any(|&endpoint| path.starts_with(endpoint)) {
         return Ok(next.run(request).await);
     }
 

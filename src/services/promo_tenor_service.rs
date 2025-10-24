@@ -34,6 +34,13 @@ impl PromoTenorService {
     }
 
     pub async fn ser_create_promo_tenor(&self, payload: CreatePromoTenorPayload) -> Result<PromoTenor, AppError> {
+        // Validate tenor (1-60 months)
+        if payload.tenor <= 0 || payload.tenor > 60 {
+            return Err(AppError::PromoTenor(crate::error::PromoTenorError::InvalidTenor(
+                format!("Tenor must be between 1-60 months, got: {}", payload.tenor)
+            )));
+        }
+        
         self.repo.rep_insert(payload).await
     }
 
